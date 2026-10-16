@@ -1,13 +1,14 @@
 # Agente de WhatsApp
 
-Atendente virtual com IA no WhatsApp de clínicas: tira dúvidas com as instruções da clínica, consulta a agenda e **reserva** horários (a equipe confirma). Extraído do agente de WhatsApp do FisioAI.
+Atendente virtual com IA no WhatsApp de qualquer negócio: tira dúvidas com as instruções do negócio, passa para a equipe o que precisar de uma pessoa e, se o negócio quiser, consulta a agenda e **reserva** horários (a equipe confirma). Extraído do agente de WhatsApp do FisioAI.
 
 ## O que faz
 
-- Conecta o número da clínica por QR Code (servidor Evolution API gerenciado).
+- Conecta o número do negócio por QR Code (servidor Evolution API gerenciado).
 - Recebe as mensagens por webhook assinado e guarda a conversa (memória com resumo a cada 12 mensagens).
 - Responde com IA (Gemini pelo gateway da Lovable) usando ferramentas: `horarios_livres`, `conferir_horario`, `reservar_horario`, `trocar_reserva`, `cancelar_reserva`, `chamar_atendente`.
 - Modo teste (só números de teste), contatos novos x clientes, pausa automática quando a equipe responde pelo celular, transcrição de áudio (Groq, opcional), junta mensagens seguidas, não responde "ok/obrigado".
+- Por negócio: nome, ramo, instruções, agenda ligada ou desligada e regras extras da área da saúde (sem diagnóstico, urgência vai ao pronto-socorro).
 - Telas: Conversas (assumir/devolver ao agente, marcar cliente), Agenda (confirmar reservas, marcar horário, bloquear), Agente (instruções, horário de atendimento) e WhatsApp (QR Code).
 
 ## Rodar

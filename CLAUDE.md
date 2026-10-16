@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Agente de WhatsApp com IA para clínicas, extraído do FisioAI (`leoflucio/assess-aid-flow`). Textos de interface, comentários e commits em português do Brasil.
+Agente de WhatsApp com IA para qualquer negócio (não só saúde), extraído do FisioAI (`leoflucio/assess-aid-flow`). Textos de interface, comentários e commits em português do Brasil.
 
 ## Comandos
 
@@ -22,5 +22,6 @@ TanStack Start (React 19) em Cloudflare Workers, Supabase (Postgres + Auth), Tai
 - O webhook `api/public/whatsapp/webhook` valida a assinatura `?t=` (HMAC da chave do servidor) e sempre responde 200.
 - A resposta do agente é gravada ANTES do envio: o eco `fromMe` é reconhecido como do agente; outra mensagem `fromMe` é a equipe assumindo (agente em silêncio por `takeover_minutes`).
 - A IA só vê data e hora LOCAIS (Brasília), nunca ISO/UTC. "Hoje" vem de `todayLocalISO()`, nunca de `toISOString().slice(0, 10)`.
+- O prompt é genérico (`FIXED_RULES`); a agenda (`BOOKING_RULES`, `agent_settings.booking_enabled`) e as regras da saúde (`HEALTH_RULES`, `health_rules`) são opcionais por negócio. Não escreva regras de um ramo específico nas regras fixas.
 - O agente RESERVA (`bookings.status = 'reservado'`), não marca; a equipe confirma na tela Agenda. Tudo que não está cancelado ocupa o horário.
 - Regras puras ficam em arquivos sem banco e com teste (`whatsapp-agent-rules.ts`, `agenda-time.ts`). Migrations podem rodar de novo (`IF NOT EXISTS`, `DROP POLICY IF EXISTS`).

@@ -47,7 +47,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         name: "description",
         content:
-          "Atendente virtual com IA no WhatsApp da sua clínica: tira dúvidas e reserva horários.",
+          "Atendente virtual com IA no WhatsApp do seu negócio: tira dúvidas, atende clientes e reserva horários.",
       },
     ],
     links: [{ rel: "stylesheet", href: appCss }],

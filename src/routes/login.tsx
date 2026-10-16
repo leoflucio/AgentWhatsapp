@@ -51,7 +51,7 @@ function LoginPage() {
         <CardHeader>
           <CardTitle>{mode === "entrar" ? "Entrar" : "Criar conta"}</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Atendente virtual com IA no WhatsApp da sua clínica.
+            Atendente virtual com IA no WhatsApp do seu negócio.
           </p>
         </CardHeader>
         <CardContent>

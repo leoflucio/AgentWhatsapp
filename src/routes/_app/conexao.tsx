@@ -61,7 +61,7 @@ function ConexaoPage() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          WhatsApp da clínica
+          WhatsApp do negócio
           <Badge variant={state === "conectado" ? "default" : "secondary"}>
             {STATE_LABEL[state]}
           </Badge>

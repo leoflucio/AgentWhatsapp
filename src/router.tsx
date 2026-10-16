@@ -4,7 +4,7 @@ import { routeTree } from "./routeTree.gen";
 
 export const getRouter = () => {
   // Reaproveita o resultado por 30s entre telas: sem isso cada navegação
-  // refazia as mesmas consultas (lista de pacientes, agenda) no banco.
+  // refazia as mesmas consultas (conversas, agenda) no banco.
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { staleTime: 30_000, refetchOnWindowFocus: false },

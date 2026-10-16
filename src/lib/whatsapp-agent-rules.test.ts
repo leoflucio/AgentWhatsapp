@@ -68,7 +68,7 @@ describe("agente de WhatsApp — quem ele responde", () => {
         .reply,
     ).toBe(false);
   });
-  it("produção: só leads; paciente cadastrado fica com a recepção", () => {
+  it("produção: só leads; cliente fica com a equipe", () => {
     const prod = { ...gate, testMode: false };
     expect(
       shouldAgentReply({
@@ -107,7 +107,7 @@ describe("agente de WhatsApp — resposta", () => {
   it("tira emojis e espaços sobrando", () => {
     expect(cleanReply("Olá! 😊 Tudo bem?  👍\n\n\n\nAté já")).toBe("Olá! Tudo bem?\n\nAté já");
   });
-  it("instruções levam regras fixas e as da clínica", () => {
+  it("instruções levam regras fixas e as do negócio", () => {
     const p = buildSystemPrompt({
       agentName: "Ana",
       instructions: "Endereço: Rua X, 10",
@@ -250,8 +250,32 @@ describe("sequentialOffer", () => {
   });
 });
 
+describe("buildSystemPrompt — qualquer negócio", () => {
+  const base = { today: "10/10/2026", contact: "x" };
+  it("com agenda, leva as regras de reserva", () => {
+    const p = buildSystemPrompt({
+      ...base,
+      businessName: "Studio Bela",
+      segment: "salão de beleza",
+    });
+    expect(p).toContain("NEGÓCIO: Studio Bela (salão de beleza)");
+    expect(p).toContain("reservar_horario");
+    expect(p).not.toContain("diagnóstico");
+  });
+  it("sem agenda, não fala de horários e passa para a equipe", () => {
+    const p = buildSystemPrompt({ ...base, booking: false, sequentialFill: true });
+    expect(p).not.toContain("reservar_horario");
+    expect(p).not.toContain("em sequência");
+    expect(p).toContain("não tem acesso a agenda");
+  });
+  it("regras da saúde só quando ligadas", () => {
+    expect(buildSystemPrompt({ ...base, health: true })).toContain("pronto-socorro");
+    expect(buildSystemPrompt(base)).not.toContain("pronto-socorro");
+  });
+});
+
 describe("buildSystemPrompt — preenchimento sequencial", () => {
-  it("só inclui a regra quando a clínica liga a opção", () => {
+  it("só inclui a regra quando o negócio liga a opção", () => {
     const base = { today: "10/10/2026", contact: "x" };
     expect(buildSystemPrompt({ ...base, sequentialFill: true })).toContain("em sequência");
     expect(buildSystemPrompt(base)).not.toContain("em sequência");
@@ -340,9 +364,9 @@ describe("announcesCheckOnly", () => {
   });
 });
 
-describe("shouldAgentReply — pacientes", () => {
+describe("shouldAgentReply — clientes", () => {
   const base = { enabled: true, testMode: false, testNumbers: [] };
-  it("com 'responder pacientes' ligado, atende paciente cadastrado", () => {
+  it("com 'responder clientes' ligado, atende cliente", () => {
     const r = shouldAgentReply({
       gate: { ...base, replyPatients: true },
       phone: "5583988353879",
@@ -351,7 +375,7 @@ describe("shouldAgentReply — pacientes", () => {
     });
     expect(r.reply).toBe(true);
   });
-  it("desligado (padrão), paciente fica com a recepção", () => {
+  it("desligado (padrão), cliente fica com a equipe", () => {
     const r = shouldAgentReply({
       gate: base,
       phone: "5583988353879",

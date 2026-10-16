@@ -344,6 +344,8 @@ async function generateAgentReply(
   const slotMinutes = Math.max(15, Number(settings?.slot_minutes ?? 60));
   const schedule = scheduleOf(settings);
   const sequential = settings?.sequential_fill !== false;
+  // Sem agenda, o agente só informa e passa para a equipe o que precisar de ação.
+  const booking = settings?.booking_enabled !== false;
   const today = todayLocalISO();
   const freeFrom = (fromDate: string, days: number, maxResults: number): Promise<Slot[]> =>
     listFreeSlots(admin, {
@@ -397,25 +399,28 @@ async function generateAgentReply(
       ? `Já é cliente${conv.contact_name ? `: ${conv.contact_name}` : ""}.`
       : `Contato novo${conv.contact_name ? `, nome no WhatsApp: ${conv.contact_name}` : ""}.`,
     conv.from_ad ? "Chegou por um anúncio." : "",
-    apptText
-      ? `Já tem horário confirmado na agenda: ${apptText}. NÃO ofereça horário de novo; para mudar ou desmarcar esse horário, use chamar_atendente.`
-      : "",
-    holdText
-      ? `Já tem horário reservado por aqui: ${holdText}. NÃO ofereça horário de novo; só troque (trocar_reserva) ou desmarque (cancelar_reserva) se a pessoa pedir.`
+    !booking
+      ? ""
       : apptText
-        ? ""
-        : "Ainda não tem horário reservado.",
+        ? `Já tem horário confirmado na agenda: ${apptText}. NÃO ofereça horário de novo; para mudar ou desmarcar esse horário, use chamar_atendente.`
+        : "",
+    !booking
+      ? ""
+      : holdText
+        ? `Já tem horário reservado por aqui: ${holdText}. NÃO ofereça horário de novo; só troque (trocar_reserva) ou desmarque (cancelar_reserva) se a pessoa pedir.`
+        : apptText
+          ? ""
+          : "Ainda não tem horário reservado.",
     conv.summary ? `Resumo das conversas anteriores: ${conv.summary}` : "Primeira conversa.",
     // Já respondeu antes (nesta conversa ou em outra, pelo resumo): não se reapresenta.
     messages.some((x) => x.role === "assistant") || conv.summary
-      ? "Você JÁ se apresentou a esta pessoa: NÃO repita a apresentação nem o nome da clínica no começo; vá direto ao ponto."
+      ? "Você JÁ se apresentou a esta pessoa: NÃO repita a apresentação nem o nome do negócio no começo; vá direto ao ponto."
       : "Esta é a sua primeira resposta a esta pessoa: apresente-se uma única vez.",
   ]
     .filter(Boolean)
     .join(" ");
 
   const instructions = [
-    ctx.account.name ? `Nome da clínica: ${ctx.account.name}.` : "",
     ctx.account.address ? `Endereço: ${ctx.account.address}.` : "",
     (settings?.instructions ?? "").trim(),
   ]
@@ -424,6 +429,10 @@ async function generateAgentReply(
   const system = buildSystemPrompt({
     hours: scheduleText(schedule),
     agentName: settings?.agent_name,
+    businessName: ctx.account.name,
+    segment: settings?.segment,
+    booking,
+    health: settings?.health_rules === true,
     instructions,
     today: today.split("-").reverse().join("/"),
     calendar: calendarText(today, 14),
@@ -460,7 +469,7 @@ async function generateAgentReply(
     );
     const reason = inHours
       ? "Este horário está ocupado"
-      : "Este horário está fora do horário de atendimento da clínica nesse dia";
+      : "Este horário está fora do horário de atendimento nesse dia";
     const near = await freeFrom(data >= today ? data : today, 7, 4);
     return {
       error: near.length
@@ -581,7 +590,7 @@ async function generateAgentReply(
             .map((e) => `${e.horario} (data: ${e.data}, hora: ${e.hora})`)
             .join(
               "; ",
-            )}. A clínica preenche a agenda em sequência: explique com gentileza que há opção mais cedo e ofereça primeiro ${earlier[0]!.horario}. Se a pessoa disser que não pode mais cedo (ou já disse), reserve ${found.slot.label} sem insistir.`;
+            )}. O negócio preenche a agenda em sequência: explique com gentileza que há opção mais cedo e ofereça primeiro ${earlier[0]!.horario}. Se a pessoa disser que não pode mais cedo (ou já disse), reserve ${found.slot.label} sem insistir.`;
         }
         return `Livre: ${found.slot.label}. Pode oferecer este horário e, se a pessoa aceitar, pedir o nome e reservar.`;
       },
@@ -671,17 +680,20 @@ async function generateAgentReply(
           .from("conversations")
           .update({ attention_reason: motivo.slice(0, 300) })
           .eq("id", conv.id);
-        return "A equipe foi avisada. Diga que alguém da clínica vai responder em breve.";
+        return "A equipe foi avisada. Diga que alguém da equipe vai responder em breve.";
       },
     }),
   };
 
+  // Sem agenda, a IA só pode chamar a equipe.
+  const activeTools = booking ? undefined : (["chamar_atendente"] as Array<keyof typeof tools>);
   const run = (msgs: typeof messages, extraSystem = "") =>
     generateText({
       model: ai("google/gemini-3.8-flash"),
       system: extraSystem ? `${system}\n\n${extraSystem}` : system,
       messages: msgs,
       tools,
+      activeTools,
       stopWhen: stepCountIs(8),
       temperature: 0.3,
       maxRetries: 1,
@@ -692,7 +704,9 @@ async function generateAgentReply(
   if (!result.text.trim() || announcesCheckOnly(result.text)) {
     result = await run(
       [...messages, ...(result.response.messages as typeof messages)],
-      "Responda AGORA com o resultado: se for oferecer horários, chame horarios_livres e já ofereça duas opções. Não diga que vai verificar nem peça desculpas pela agenda.",
+      booking
+        ? "Responda AGORA com o resultado: se for oferecer horários, chame horarios_livres e já ofereça duas opções. Não diga que vai verificar nem peça desculpas pela agenda."
+        : "Responda AGORA com o que está nas instruções; se a informação não estiver lá, use chamar_atendente. Não diga que vai verificar.",
     );
   }
   // Horário citado que a agenda não devolveu nesta rodada (a IA às vezes
@@ -711,7 +725,7 @@ async function generateAgentReply(
     if (bad.length) console.warn("[agente] horário não conferido na resposta:", bad);
     return bad.length === 0;
   };
-  if (!verified(result)) {
+  if (booking && !verified(result)) {
     const retry = await generateText({
       model: ai("google/gemini-3.8-flash"),
       system: `${system}\n\nConsulte a agenda agora com horarios_livres (ou conferir_horario, se a pessoa pediu dia e hora) e ofereça SOMENTE os horários devolvidos. Os horários que estavam na sua resposta anterior não foram conferidos e podem estar ocupados.`,
@@ -772,7 +786,7 @@ async function maybeSummarize(admin: any, conversationId: string) {
     const r = await generateText({
       model: ai("google/gemini-3.1-flash-lite"),
       system:
-        "Resuma em até 5 frases o que se sabe deste contato de WhatsApp de uma clínica: nome, interesse/queixa relatada, dúvidas, objeções, horários efetivamente reservados e próximos passos. Não registre horários que foram só oferecidos e não reservados. Sem dados sensíveis desnecessários.",
+        "Resuma em até 5 frases o que se sabe deste contato de WhatsApp de um negócio: nome, interesse ou necessidade, dúvidas, objeções, horários efetivamente reservados e próximos passos. Não registre horários que foram só oferecidos e não reservados. Sem dados sensíveis desnecessários.",
       prompt: `${conv.summary ? `Resumo anterior: ${conv.summary}\n\n` : ""}Conversa recente:\n${transcript}`,
       maxRetries: 1,
     });

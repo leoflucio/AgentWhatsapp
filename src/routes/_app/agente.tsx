@@ -119,12 +119,12 @@ function AgentePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Clínica e instruções</CardTitle>
+          <CardTitle>Negócio e instruções</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="nome">Nome da clínica</Label>
+              <Label htmlFor="nome">Nome do negócio</Label>
               <Input
                 id="nome"
                 value={s.businessName}
@@ -142,6 +142,24 @@ function AgentePage() {
             </div>
           </div>
           <div className="space-y-2">
+            <Label htmlFor="ramo">Ramo do negócio</Label>
+            <Input
+              id="ramo"
+              placeholder="Ex.: salão de beleza, loja de roupas, escritório de contabilidade, clínica"
+              value={s.segment}
+              onChange={(e) => set("segment", e.target.value)}
+            />
+          </div>
+          <label className="flex items-center justify-between gap-4">
+            <span>
+              <span className="font-medium">Área da saúde</span>
+              <span className="block text-sm text-muted-foreground">
+                O agente nunca dá diagnóstico e orienta procurar o pronto-socorro em urgências.
+              </span>
+            </span>
+            <Switch checked={s.healthRules} onCheckedChange={(v) => set("healthRules", v)} />
+          </label>
+          <div className="space-y-2">
             <Label htmlFor="endereco">Endereço (enviado depois de cada reserva)</Label>
             <Input
               id="endereco"
@@ -154,7 +172,7 @@ function AgentePage() {
             <Textarea
               id="instrucoes"
               rows={10}
-              placeholder="Serviços, valores, convênios, formas de pagamento, como explicar o tratamento, o que nunca dizer…"
+              placeholder="O que você vende ou faz, valores, formas de pagamento, entrega, perguntas frequentes, o que o agente nunca deve dizer…"
               value={s.instructions}
               onChange={(e) => set("instructions", e.target.value)}
             />
@@ -167,6 +185,16 @@ function AgentePage() {
           <CardTitle>Horário de atendimento</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          <label className="flex items-center justify-between gap-4">
+            <span>
+              <span className="font-medium">Agente reserva horários</span>
+              <span className="block text-sm text-muted-foreground">
+                Desligado, ele só informa o horário de funcionamento e passa para a equipe quem
+                quiser marcar ou comprar.
+              </span>
+            </span>
+            <Switch checked={s.bookingEnabled} onCheckedChange={(v) => set("bookingEnabled", v)} />
+          </label>
           {DAYS.map((name, day) => {
             const [win, ...rest] = s.schedule[day] ?? [];
             return (

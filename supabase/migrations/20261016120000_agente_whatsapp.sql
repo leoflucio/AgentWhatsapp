@@ -6,7 +6,7 @@
 CREATE TABLE IF NOT EXISTS public.accounts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   owner_id uuid NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
-  name text NOT NULL DEFAULT 'Minha clínica',
+  name text NOT NULL DEFAULT 'Minha empresa',
   address text,
   created_at timestamptz NOT NULL DEFAULT now()
 );
