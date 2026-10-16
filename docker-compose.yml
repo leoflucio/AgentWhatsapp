@@ -1,0 +1,14 @@
+# Na VPS: copie .env.example para .env, preencha e rode `docker compose up -d --build`.
+# O app fica em http://localhost:3000; ponha um domínio com HTTPS na frente
+# (proxy do painel da Hostinger, Caddy, Nginx ou Traefik) e use esse endereço em PUBLIC_APP_URL.
+services:
+  app:
+    build:
+      context: .
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY}
+    env_file: .env
+    ports:
+      - "3000:3000"
+    restart: unless-stopped

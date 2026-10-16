@@ -14,7 +14,7 @@ bun run lint        # eslint + prettier
 
 ## Stack
 
-TanStack Start (React 19) em Cloudflare Workers, Supabase (Postgres + Auth), Tailwind 4 + shadcn/ui, AI SDK pelo gateway da Lovable, Evolution API para o WhatsApp. `vite.config.ts` usa `@lovable.dev/vite-tanstack-config`, que já registra os plugins; não adicione de novo. `src/routeTree.gen.ts` e `src/integrations/supabase/*` são gerados.
+TanStack Start (React 19) com build Node (nitro, preset `node-server`) para rodar em VPS com Docker, Supabase (Postgres + Auth), Tailwind 4 + shadcn/ui, AI SDK com provedor compatível com OpenAI (`src/lib/ai.server.ts`, Gemini por padrão), Evolution API para o WhatsApp. Sem Lovable e sem Cloudflare. `src/routeTree.gen.ts` é gerado pelo build.
 
 ## Regras
 

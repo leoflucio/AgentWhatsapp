@@ -9,7 +9,7 @@
  * equipe confirmar.
  */
 import { generateText, stepCountIs, tool } from "ai";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { aiModel } from "@/lib/ai.server";
 import { z } from "zod";
 import { samePhoneBR } from "@/lib/phone";
 import { scheduleText } from "@/lib/agenda-hours";
@@ -68,16 +68,6 @@ type Ctx = {
 export function fmtPhone(digits: string): string {
   const d = digits.replace(/^55/, "");
   return d.length === 11 ? `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}` : d;
-}
-
-function gateway() {
-  const key = process.env.LOVABLE_API_KEY;
-  if (!key) return null;
-  return createOpenAICompatible({
-    name: "lovable",
-    baseURL: "https://ai.gateway.lovable.dev/v1",
-    headers: { "Lovable-API-Key": key, "X-Lovable-AIG-SDK": "vercel-ai-sdk" },
-  });
 }
 
 /** Processa um evento messages.upsert da Evolution. Nunca lança. */
@@ -327,8 +317,8 @@ async function generateAgentReply(
   admin: any,
   args: { ctx: Ctx; settings: any; conv: any; phone: string },
 ): Promise<{ text: string; followUps: string[]; acted: boolean } | null> {
-  const ai = gateway();
-  if (!ai) return null;
+  const model = aiModel("main");
+  if (!model) return null;
   // Mensagens automáticas enviadas depois da resposta (endereço).
   const followUps: string[] = [];
   // Alguma ferramenta mudou a agenda ou chamou a equipe nesta resposta.
@@ -689,7 +679,7 @@ async function generateAgentReply(
   const activeTools = booking ? undefined : (["chamar_atendente"] as Array<keyof typeof tools>);
   const run = (msgs: typeof messages, extraSystem = "") =>
     generateText({
-      model: ai("google/gemini-3.8-flash"),
+      model,
       system: extraSystem ? `${system}\n\n${extraSystem}` : system,
       messages: msgs,
       tools,
@@ -727,7 +717,7 @@ async function generateAgentReply(
   };
   if (booking && !verified(result)) {
     const retry = await generateText({
-      model: ai("google/gemini-3.8-flash"),
+      model,
       system: `${system}\n\nConsulte a agenda agora com horarios_livres (ou conferir_horario, se a pessoa pediu dia e hora) e ofereça SOMENTE os horários devolvidos. Os horários que estavam na sua resposta anterior não foram conferidos e podem estar ocupados.`,
       messages,
       tools,
@@ -760,8 +750,8 @@ async function generateAgentReply(
 
 /** Atualiza o resumo da conversa a cada SUMMARY_EVERY mensagens (memória longa). */
 async function maybeSummarize(admin: any, conversationId: string) {
-  const ai = gateway();
-  if (!ai) return;
+  const model = aiModel("lite");
+  if (!model) return;
   const { count } = await admin
     .from("messages")
     .select("id", { count: "exact", head: true })
@@ -784,7 +774,7 @@ async function maybeSummarize(admin: any, conversationId: string) {
     .join("\n");
   try {
     const r = await generateText({
-      model: ai("google/gemini-3.1-flash-lite"),
+      model,
       system:
         "Resuma em até 5 frases o que se sabe deste contato de WhatsApp de um negócio: nome, interesse ou necessidade, dúvidas, objeções, horários efetivamente reservados e próximos passos. Não registre horários que foram só oferecidos e não reservados. Sem dados sensíveis desnecessários.",
       prompt: `${conv.summary ? `Resumo anterior: ${conv.summary}\n\n` : ""}Conversa recente:\n${transcript}`,

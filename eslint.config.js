@@ -11,9 +11,8 @@ export default tseslint.config(
       "dist",
       ".output",
       ".vinxi",
-      // Gerados pelo Lovable/Supabase: não editar à mão.
+      // Gerado pelo Supabase: não editar à mão.
       "src/integrations/supabase/types.ts",
-      "src/integrations/supabase/previewAuthStorage.ts",
     ],
   },
   {
