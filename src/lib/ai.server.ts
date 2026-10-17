@@ -4,8 +4,8 @@
  *
  * AI_API_KEY   chave do provedor (obrigatória)
  * AI_BASE_URL  endereço da API (padrão: Gemini, endpoint compatível com OpenAI)
- * AI_MODEL     modelo das respostas (padrão: gemini-2.5-flash)
- * AI_MODEL_LITE modelo barato dos resumos (padrão: gemini-2.5-flash-lite)
+ * AI_MODEL     modelo das respostas (padrão: gemini-3.8-flash)
+ * AI_MODEL_LITE modelo barato dos resumos (padrão: gemini-3.1-flash-lite)
  */
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
@@ -21,7 +21,7 @@ export function aiModel(kind: "main" | "lite" = "main") {
   });
   const name =
     kind === "lite"
-      ? (process.env.AI_MODEL_LITE ?? "").trim() || "gemini-2.5-flash-lite"
-      : (process.env.AI_MODEL ?? "").trim() || "gemini-2.5-flash";
+      ? (process.env.AI_MODEL_LITE ?? "").trim() || "gemini-3.1-flash-lite"
+      : (process.env.AI_MODEL ?? "").trim() || "gemini-3.8-flash";
   return provider(name);
 }
