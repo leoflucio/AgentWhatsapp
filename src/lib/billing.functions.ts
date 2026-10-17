@@ -103,7 +103,7 @@ export const checkoutPlan = createServerFn({ method: "POST" })
       customer: customerId,
       value: info.price,
       nextDueDate: decision.nextDueDate,
-      description: `Agente de WhatsApp ${info.label} (${info.replies.toLocaleString("pt-BR")} respostas/mês)`,
+      description: `Secretária Digital 24h ${info.label} (${info.replies.toLocaleString("pt-BR")} respostas/mês)`,
       externalReference: externalReference(account.id, plan),
     });
 

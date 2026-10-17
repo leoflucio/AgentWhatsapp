@@ -71,7 +71,7 @@ function AppLayout() {
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card">
         <div className="mx-auto flex max-w-5xl items-center gap-1 overflow-x-auto px-4 py-2">
-          <span className="mr-3 shrink-0 font-semibold">Agente de WhatsApp</span>
+          <span className="mr-3 shrink-0 font-semibold">Secretária Digital 24h</span>
           {NAV.map(({ to, label, icon: Icon }) => (
             <Link
               key={to}

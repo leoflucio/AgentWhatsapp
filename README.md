@@ -1,4 +1,4 @@
-# Agente de WhatsApp
+# Secretária Digital 24h
 
 Atendente virtual com IA no WhatsApp de qualquer negócio: tira dúvidas com as instruções do negócio, passa para a equipe o que precisar de uma pessoa e, se o negócio quiser, consulta a agenda e **reserva** horários (a equipe confirma). Extraído do agente de WhatsApp do FisioAI.
 
@@ -74,4 +74,5 @@ O cliente assina na tela Planos (Pix, boleto ou cartão). Atraso: o agente conti
 
 - Agenda externa opcional (Google Calendar ou o próprio FisioAI).
 - Follow-up de quem parou de responder.
+- App Android na Play Store (TWA): gerar o pacote no PWABuilder com o domínio, pôr `ANDROID_PACKAGE` e `ANDROID_SHA256` no `.env`.
 - Sincronizar com o Google Contatos (precisa de app verificado pelo Google).

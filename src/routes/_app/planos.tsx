@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cancelPlan, checkoutPlan, getBilling } from "@/lib/billing.functions";
 import { PLAN_IDS, PLANS, TRIAL_DAYS, type PlanId } from "@/lib/billing-rules";
+import { useStoreApp } from "@/lib/store-app";
 
 export const Route = createFileRoute("/_app/planos")({ component: PlanosPage });
 
@@ -21,6 +22,7 @@ function PlanosPage() {
   const [busy, setBusy] = useState<PlanId | "cancel" | null>(null);
   const [name, setName] = useState("");
   const [doc, setDoc] = useState("");
+  const storeApp = useStoreApp();
   const b = q.data;
   if (!b) return <p className="text-sm text-muted-foreground">Carregando…</p>;
 
@@ -98,7 +100,7 @@ function PlanosPage() {
               {b.limit.toLocaleString("pt-BR")}.
             </p>
           )}
-          {b.pendingPlan && (
+          {b.pendingPlan && !storeApp && (
             <p>
               Aguardando o pagamento do plano {PLANS[b.pendingPlan as PlanId]?.label}.{" "}
               {b.pendingInvoiceUrl && (
@@ -116,7 +118,13 @@ function PlanosPage() {
         </CardContent>
       </Card>
 
-      {b.kind !== "isento" && (
+      {b.kind !== "isento" && storeApp && (
+        <p className="text-sm text-muted-foreground">
+          Para assinar ou trocar de plano, entre em secretariadigital24h.com.br pelo navegador.
+        </p>
+      )}
+
+      {b.kind !== "isento" && !storeApp && (
         <>
           {!b.billingAvailable ? (
             <p className="text-sm text-muted-foreground">
