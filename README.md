@@ -36,7 +36,7 @@ Para o WhatsApp alcançar o app no seu computador, abra um túnel (`cloudflared 
    docker compose up -d --build
    ```
    O app sobe na porta 3000.
-5. **Domínio com HTTPS:** aponte um subdomínio (ex.: `agente.seudominio.com.br`) para a VPS e ponha um proxy com HTTPS na frente da porta 3000 (Caddy, Nginx ou Traefik; se a Evolution já roda nessa VPS, use o mesmo proxy dela). Esse endereço vai em `PUBLIC_APP_URL`; depois de mudar o `.env`, rode `docker compose up -d` de novo.
+5. **Domínio com HTTPS:** aponte o domínio (registro tipo A) para o IP da VPS. Se a VPS já tem o Traefik (como o da Evolution, com o resolver `letsencrypt`), ponha `APP_DOMAIN=seudominio.com.br` e `PUBLIC_APP_URL=https://seudominio.com.br` no `.env` e rode `docker compose up -d`: o certificado sai sozinho. Sem Traefik, use outro proxy com HTTPS (Caddy, Nginx) na frente da porta 3000.
 6. **Cobrança (Asaas):** em asaas.com › Integrações, copie a chave da API para `ASAAS_API_KEY`. Em Integrações › Webhooks, crie um webhook de cobranças com a URL `https://SEU_ENDERECO/api/public/asaas/webhook` e um token inventado por você, que vai também em `ASAAS_WEBHOOK_TOKEN`. Ponha seu e-mail de login em `ADMIN_EMAILS`.
 7. Abra o app, crie sua conta, conecte o WhatsApp pelo QR Code, escreva as instruções, ponha seu número em "números de teste" e ligue o agente.
 
