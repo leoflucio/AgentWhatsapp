@@ -5,7 +5,9 @@
 function apiKey(): string {
   const k = (process.env.ASAAS_API_KEY ?? "").trim();
   if (!k) throw new Error("A cobrança ainda não foi configurada (ASAAS_API_KEY).");
-  return k;
+  // O "$" do começo da chave some no shell e no docker compose; o .env pode
+  // guardar a chave sem ele.
+  return k.startsWith("aact_") ? `$${k}` : k;
 }
 
 export function asaasConfigured(): boolean {
