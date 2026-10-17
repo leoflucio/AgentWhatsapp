@@ -16,6 +16,7 @@ import { Route as AppAdminRouteImport } from './routes/_app/admin'
 import { Route as AppAgendaRouteImport } from './routes/_app/agenda'
 import { Route as AppAgenteRouteImport } from './routes/_app/agente'
 import { Route as AppConexaoRouteImport } from './routes/_app/conexao'
+import { Route as AppContatosRouteImport } from './routes/_app/contatos'
 import { Route as AppConversasRouteImport } from './routes/_app/conversas'
 import { Route as AppPlanosRouteImport } from './routes/_app/planos'
 import { Route as ApiPublicAsaasWebhookRouteImport } from './routes/api/public/asaas/webhook'
@@ -55,6 +56,11 @@ const AppConexaoRoute = AppConexaoRouteImport.update({
   path: '/conexao',
   getParentRoute: () => AppRoute,
 } as any)
+const AppContatosRoute = AppContatosRouteImport.update({
+  id: '/contatos',
+  path: '/contatos',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppConversasRoute = AppConversasRouteImport.update({
   id: '/conversas',
   path: '/conversas',
@@ -84,6 +90,7 @@ export interface FileRoutesByFullPath {
   '/agenda': typeof AppAgendaRoute
   '/agente': typeof AppAgenteRoute
   '/conexao': typeof AppConexaoRoute
+  '/contatos': typeof AppContatosRoute
   '/conversas': typeof AppConversasRoute
   '/planos': typeof AppPlanosRoute
   '/api/public/asaas/webhook': typeof ApiPublicAsaasWebhookRoute
@@ -96,6 +103,7 @@ export interface FileRoutesByTo {
   '/agenda': typeof AppAgendaRoute
   '/agente': typeof AppAgenteRoute
   '/conexao': typeof AppConexaoRoute
+  '/contatos': typeof AppContatosRoute
   '/conversas': typeof AppConversasRoute
   '/planos': typeof AppPlanosRoute
   '/api/public/asaas/webhook': typeof ApiPublicAsaasWebhookRoute
@@ -110,6 +118,7 @@ export interface FileRoutesById {
   '/_app/agenda': typeof AppAgendaRoute
   '/_app/agente': typeof AppAgenteRoute
   '/_app/conexao': typeof AppConexaoRoute
+  '/_app/contatos': typeof AppContatosRoute
   '/_app/conversas': typeof AppConversasRoute
   '/_app/planos': typeof AppPlanosRoute
   '/api/public/asaas/webhook': typeof ApiPublicAsaasWebhookRoute
@@ -124,6 +133,7 @@ export interface FileRouteTypes {
     | '/agenda'
     | '/agente'
     | '/conexao'
+    | '/contatos'
     | '/conversas'
     | '/planos'
     | '/api/public/asaas/webhook'
@@ -136,6 +146,7 @@ export interface FileRouteTypes {
     | '/agenda'
     | '/agente'
     | '/conexao'
+    | '/contatos'
     | '/conversas'
     | '/planos'
     | '/api/public/asaas/webhook'
@@ -149,6 +160,7 @@ export interface FileRouteTypes {
     | '/_app/agenda'
     | '/_app/agente'
     | '/_app/conexao'
+    | '/_app/contatos'
     | '/_app/conversas'
     | '/_app/planos'
     | '/api/public/asaas/webhook'
@@ -214,6 +226,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppConexaoRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/contatos': {
+      id: '/_app/contatos'
+      path: '/contatos'
+      fullPath: '/contatos'
+      preLoaderRoute: typeof AppContatosRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/conversas': {
       id: '/_app/conversas'
       path: '/conversas'
@@ -250,6 +269,7 @@ interface AppRouteChildren {
   AppAgendaRoute: typeof AppAgendaRoute
   AppAgenteRoute: typeof AppAgenteRoute
   AppConexaoRoute: typeof AppConexaoRoute
+  AppContatosRoute: typeof AppContatosRoute
   AppConversasRoute: typeof AppConversasRoute
   AppPlanosRoute: typeof AppPlanosRoute
 }
@@ -259,6 +279,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAgendaRoute: AppAgendaRoute,
   AppAgenteRoute: AppAgenteRoute,
   AppConexaoRoute: AppConexaoRoute,
+  AppContatosRoute: AppContatosRoute,
   AppConversasRoute: AppConversasRoute,
   AppPlanosRoute: AppPlanosRoute,
 }

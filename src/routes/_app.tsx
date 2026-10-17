@@ -8,6 +8,7 @@ import {
   MessagesSquare,
   QrCode,
   Shield,
+  Users,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { getBilling } from "@/lib/billing.functions";
@@ -18,6 +19,7 @@ export const Route = createFileRoute("/_app")({ component: AppLayout });
 const NAV = [
   { to: "/conversas", label: "Conversas", icon: MessagesSquare },
   { to: "/agenda", label: "Agenda", icon: CalendarDays },
+  { to: "/contatos", label: "Contatos", icon: Users },
   { to: "/agente", label: "Agente", icon: Bot },
   { to: "/conexao", label: "WhatsApp", icon: QrCode },
   { to: "/planos", label: "Planos", icon: CreditCard },

@@ -11,7 +11,7 @@
 import { generateText, stepCountIs, tool } from "ai";
 import { aiModel } from "@/lib/ai.server";
 import { z } from "zod";
-import { samePhoneBR } from "@/lib/phone";
+import { phoneMatchKey, samePhoneBR } from "@/lib/phone";
 import { scheduleText } from "@/lib/agenda-hours";
 import {
   formatLocal,
@@ -231,6 +231,9 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
     })
     .eq("id", conv.id);
 
+  // Lista de contatos do negócio (tela Contatos): nome, observações e se é cliente.
+  const listed = await findListedContact(admin, accountId, phone);
+
   const takeover =
     conv.human_takeover || (conv.takeover_until && new Date(conv.takeover_until) > new Date());
   const gate = shouldAgentReply({
@@ -241,7 +244,7 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
       replyPatients: settings?.reply_clients === true,
     },
     phone,
-    isPatient: Boolean(conv.is_client),
+    isPatient: Boolean(conv.is_client || listed?.is_client),
     humanTakeover: Boolean(takeover),
   });
   if (!gate.reply) {
@@ -315,7 +318,7 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
     if (onlyAcknowledgments(bodies, String(lastAgent.body ?? ""))) return;
   }
 
-  const out = await generateAgentReply(admin, { ctx, settings, conv, phone });
+  const out = await generateAgentReply(admin, { ctx, settings, conv, phone, listed });
   const toSend = [out?.text ?? "", ...(out?.followUps ?? [])].filter((t) => t.trim());
   if (toSend.length === 0) {
     console.log("[agente] resposta vazia da IA", conv.id);
@@ -353,9 +356,33 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
   await maybeSummarize(admin, conv.id);
 }
 
+type ListedContact = { name: string; notes: string | null; is_client: boolean };
+
+/** Procura o telefone na lista de contatos da conta. Falha (tabela ausente etc.) = sem contato. */
+async function findListedContact(
+  admin: any,
+  accountId: string,
+  phone: string,
+): Promise<ListedContact | null> {
+  const key = phoneMatchKey(phone);
+  if (!key) return null;
+  const { data, error } = await admin
+    .from("contacts")
+    .select("name, notes, is_client")
+    .eq("account_id", accountId)
+    .eq("phone_key", key)
+    .maybeSingle();
+  if (error || !data) return null;
+  return {
+    name: String(data.name ?? "").trim(),
+    notes: data.notes ? String(data.notes).slice(0, 800) : null,
+    is_client: Boolean(data.is_client),
+  };
+}
+
 async function generateAgentReply(
   admin: any,
-  args: { ctx: Ctx; settings: any; conv: any; phone: string },
+  args: { ctx: Ctx; settings: any; conv: any; phone: string; listed: ListedContact | null },
 ): Promise<{ text: string; followUps: string[]; acted: boolean } | null> {
   const model = aiModel("main");
   if (!model) return null;
@@ -363,7 +390,7 @@ async function generateAgentReply(
   const followUps: string[] = [];
   // Alguma ferramenta mudou a agenda ou chamou a equipe nesta resposta.
   let acted = false;
-  const { ctx, settings, conv, phone } = args;
+  const { ctx, settings, conv, phone, listed } = args;
   const accountId = ctx.account.id;
   // A IA só vê e devolve data e hora LOCAIS (Brasília). Nunca ISO/UTC: com
   // "T19:00Z" na mão ela escrevia "T16:00Z" para "16h" e reservava 13h.
@@ -424,10 +451,15 @@ async function generateAgentReply(
   const holdText = holdList.map((h) => formatLocal(h.starts_at)).join(", ");
   const apptText = myAppts.map((a) => formatLocal(a.starts_at)).join(", ");
 
+  const isClient = Boolean(conv.is_client || listed?.is_client);
+  const knownName = listed?.name || conv.contact_name;
   const contact = [
-    conv.is_client
-      ? `Já é cliente${conv.contact_name ? `: ${conv.contact_name}` : ""}.`
+    isClient
+      ? `Já é cliente${knownName ? `: ${knownName}` : ""}.`
       : `Contato novo${conv.contact_name ? `, nome no WhatsApp: ${conv.contact_name}` : ""}.`,
+    listed
+      ? `Está na lista de contatos do negócio${listed.name ? ` como "${listed.name}"` : ""}.${listed.notes ? ` Observações da equipe (use só como contexto, não leia para a pessoa): ${listed.notes}` : ""}`
+      : "",
     conv.from_ad ? "Chegou por um anúncio." : "",
     !booking
       ? ""

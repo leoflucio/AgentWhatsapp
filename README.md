@@ -9,7 +9,7 @@ Atendente virtual com IA no WhatsApp de qualquer negócio: tira dúvidas com as 
 - Responde com IA (Gemini do Google por padrão, ou qualquer provedor compatível com a API da OpenAI) usando ferramentas: `horarios_livres`, `conferir_horario`, `reservar_horario`, `trocar_reserva`, `cancelar_reserva`, `chamar_atendente`.
 - Modo teste (só números de teste), contatos novos x clientes, pausa automática quando a equipe responde pelo celular, transcrição de áudio (Groq, opcional), junta mensagens seguidas, não responde "ok/obrigado".
 - Por negócio: nome, ramo, instruções, agenda ligada ou desligada e regras extras da área da saúde (sem diagnóstico, urgência vai ao pronto-socorro).
-- Telas: Conversas (assumir/devolver ao agente, marcar cliente), Agenda (confirmar reservas, marcar horário, bloquear), Agente (instruções, horário de atendimento) e WhatsApp (QR Code).
+- Telas: Conversas (assumir/devolver ao agente, marcar cliente), Agenda (confirmar reservas, marcar horário, bloquear), Agente (instruções, horário de atendimento) WhatsApp (QR Code) e Contatos (lista editável, importada da agenda do celular por arquivo .vcf/.csv ou pelo seletor do Chrome no Android; o agente reconhece quem está na lista, chama pelo nome e lê as observações).
 
 ## Rodar no computador
 
@@ -56,20 +56,22 @@ O cliente assina na tela Planos (Pix, boleto ou cartão). Atraso: o agente conti
 
 ## Estrutura
 
-| Arquivo                                                                 | Papel                                                                                                 |
-| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `src/routes/api/public/whatsapp/webhook.ts`                             | Webhook da Evolution (assinatura HMAC por instância)                                                  |
-| `src/lib/agent.server.ts`                                               | Núcleo: conversa, decisão de responder, IA + ferramentas, envio, resumo                               |
-| `src/lib/whatsapp-agent-rules.ts`                                       | Regras puras e prompt fixo (testadas)                                                                 |
-| `src/lib/agenda-time.ts`, `agenda-hours.ts`, `agenda.server.ts`         | Fuso de Brasília, horário de atendimento, horários livres                                             |
-| `src/lib/evolution.server.ts`                                           | Evolution API: envio, webhook, áudio                                                                  |
-| `src/lib/connection.functions.ts`, `agent.functions.ts`                 | Server functions das telas                                                                            |
-| `src/lib/billing-rules.ts`, `billing.server.ts`, `billing.functions.ts` | Planos, teste grátis, cota de respostas e assinatura pelo Asaas                                       |
-| `src/routes/api/public/asaas/webhook.ts`                                | Webhook do Asaas: o plano só vale com o pagamento confirmado                                          |
-| `src/lib/admin.functions.ts`, `src/routes/_app/admin.tsx`               | Painel do dono: contas, uso, WhatsApp, bloqueio, receita e custo                                      |
-| `supabase/migrations/`                                                  | Tabelas `accounts`, `whatsapp_connections`, `agent_settings`, `conversations`, `messages`, `bookings` |
+| Arquivo                                                                               | Papel                                                                                                 |
+| ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `src/routes/api/public/whatsapp/webhook.ts`                                           | Webhook da Evolution (assinatura HMAC por instância)                                                  |
+| `src/lib/agent.server.ts`                                                             | Núcleo: conversa, decisão de responder, IA + ferramentas, envio, resumo                               |
+| `src/lib/whatsapp-agent-rules.ts`                                                     | Regras puras e prompt fixo (testadas)                                                                 |
+| `src/lib/agenda-time.ts`, `agenda-hours.ts`, `agenda.server.ts`                       | Fuso de Brasília, horário de atendimento, horários livres                                             |
+| `src/lib/evolution.server.ts`                                                         | Evolution API: envio, webhook, áudio                                                                  |
+| `src/lib/connection.functions.ts`, `agent.functions.ts`                               | Server functions das telas                                                                            |
+| `src/lib/billing-rules.ts`, `billing.server.ts`, `billing.functions.ts`               | Planos, teste grátis, cota de respostas e assinatura pelo Asaas                                       |
+| `src/routes/api/public/asaas/webhook.ts`                                              | Webhook do Asaas: o plano só vale com o pagamento confirmado                                          |
+| `src/lib/admin.functions.ts`, `src/routes/_app/admin.tsx`                             | Painel do dono: contas, uso, WhatsApp, bloqueio, receita e custo                                      |
+| `src/lib/contacts-import.ts`, `contacts.functions.ts`, `src/routes/_app/contatos.tsx` | Lista de contatos e importação da agenda (vCard/CSV)                                                  |
+| `supabase/migrations/`                                                                | Tabelas `accounts`, `whatsapp_connections`, `agent_settings`, `conversations`, `messages`, `bookings` |
 
 ## Próximas fases
 
 - Agenda externa opcional (Google Calendar ou o próprio FisioAI).
 - Follow-up de quem parou de responder.
+- Sincronizar com o Google Contatos (precisa de app verificado pelo Google).
