@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatMinutes, type DayWindow } from "@/lib/agenda-hours";
 import { getAgentSettings, saveAgentSettings } from "@/lib/agent.functions";
 import { TAKEOVER_OPTIONS, takeoverLabel } from "@/lib/whatsapp-agent-rules";
+import { FOLLOWUP_DAY_OPTIONS, followUpDaysLabel } from "@/lib/followup-rules";
 
 export const Route = createFileRoute("/_app/agente")({ component: AgentePage });
 
@@ -114,6 +115,37 @@ function AgentePage() {
               ))}
             </select>
           </div>
+          <label className="flex items-center justify-between gap-4">
+            <span>
+              <span className="font-medium">Retomar conversas paradas</span>
+              <span className="block text-sm text-muted-foreground">
+                Quem conversou e parou sem fechar (sem horário marcado e sem ser cliente) recebe uma
+                mensagem de retomada, uma vez, no horário de atendimento. Se a pessoa recusou ou
+                pediu para não receber mensagens, o agente não manda.
+              </span>
+            </span>
+            <Switch
+              checked={s.followupEnabled}
+              onCheckedChange={(v) => set("followupEnabled", v)}
+            />
+          </label>
+          {s.followupEnabled && (
+            <div className="space-y-2">
+              <Label htmlFor="followup-days">Retomar depois de</Label>
+              <select
+                id="followup-days"
+                className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                value={s.followupDays}
+                onChange={(e) => set("followupDays", Number(e.target.value))}
+              >
+                {FOLLOWUP_DAY_OPTIONS.map((d) => (
+                  <option key={d} value={d}>
+                    {followUpDaysLabel(d)} sem resposta
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </CardContent>
       </Card>
 

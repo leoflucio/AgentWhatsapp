@@ -226,6 +226,8 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
     .from("conversations")
     .update({
       last_message_at: now,
+      // Respondeu: a conversa pode receber outra retomada se parar de novo.
+      ...(conv.followup_sent_at ? { followup_sent_at: null, followup_status: null } : {}),
       ...(cameFromAd(m) ? { from_ad: true } : {}),
       ...(!conv.contact_name && m.pushName ? { contact_name: m.pushName } : {}),
     })

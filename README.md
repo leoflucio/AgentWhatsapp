@@ -7,6 +7,7 @@ Atendente virtual com IA no WhatsApp de qualquer negócio: tira dúvidas com as 
 - Conecta o número do negócio por QR Code (servidor Evolution API gerenciado).
 - Recebe as mensagens por webhook assinado e guarda a conversa (memória com resumo a cada 12 mensagens).
 - Responde com IA (Gemini do Google por padrão, ou qualquer provedor compatível com a API da OpenAI) usando ferramentas: `horarios_livres`, `conferir_horario`, `reservar_horario`, `trocar_reserva`, `cancelar_reserva`, `chamar_atendente`.
+- Retomada: quem conversou e parou sem fechar recebe uma mensagem depois de alguns dias (opcional, no horário de atendimento; a IA não insiste com quem recusou).
 - Modo teste (só números de teste), contatos novos x clientes, pausa automática quando a equipe responde pelo celular, transcrição de áudio (Groq, opcional), junta mensagens seguidas, não responde "ok/obrigado".
 - Por negócio: nome, ramo, instruções, agenda ligada ou desligada e regras extras da área da saúde (sem diagnóstico, urgência vai ao pronto-socorro).
 - Telas: Conversas (assumir/devolver ao agente, marcar cliente), Agenda (confirmar reservas, marcar horário, bloquear), Agente (instruções, horário de atendimento) WhatsApp (QR Code) e Contatos (lista editável, importada da agenda do celular por arquivo .vcf/.csv ou pelo seletor do Chrome no Android; o agente reconhece quem está na lista, chama pelo nome e lê as observações).
@@ -73,6 +74,5 @@ O cliente assina na tela Planos (Pix, boleto ou cartão). Atraso: o agente conti
 ## Próximas fases
 
 - Agenda externa opcional (Google Calendar ou o próprio FisioAI).
-- Follow-up de quem parou de responder.
 - App Android na Play Store (TWA): gerar o pacote no PWABuilder com o domínio, pôr `ANDROID_PACKAGE` e `ANDROID_SHA256` no `.env`.
 - Sincronizar com o Google Contatos (precisa de app verificado pelo Google).

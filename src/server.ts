@@ -66,6 +66,14 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
   return brandedErrorResponse();
 }
 
+// Retomada automática (follow-up) das conversas paradas. Só em produção: no
+// `bun run dev` cada recarga criaria outro timer.
+if (process.env.NODE_ENV === "production") {
+  void import("./lib/followup.server")
+    .then((m) => m.startFollowUpTimer())
+    .catch((e) => console.error("[retomada] não iniciou", e));
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {

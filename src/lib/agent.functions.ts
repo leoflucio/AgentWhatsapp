@@ -42,6 +42,8 @@ export const getAgentSettings = createServerFn({ method: "POST" })
       takeoverMinutes: Number(data?.takeover_minutes ?? 30),
       slotMinutes: Number(data?.slot_minutes ?? 60),
       sequentialFill: data?.sequential_fill !== false,
+      followupEnabled: data?.followup_enabled === true,
+      followupDays: Number(data?.followup_days ?? 2),
       schedule: parseSchedule(data?.schedule) ?? DEFAULT_SCHEDULE,
     };
   });
@@ -65,6 +67,8 @@ export const saveAgentSettings = createServerFn({ method: "POST" })
         takeoverMinutes: z.number().int().min(5).max(1440),
         slotMinutes: z.number().int().min(15).max(180),
         sequentialFill: z.boolean(),
+        followupEnabled: z.boolean(),
+        followupDays: z.number().int().min(1).max(29),
         schedule: z.record(z.string(), z.array(windowSchema)),
       })
       .parse(d),
@@ -113,6 +117,8 @@ export const saveAgentSettings = createServerFn({ method: "POST" })
         takeover_minutes: data.takeoverMinutes,
         slot_minutes: data.slotMinutes,
         sequential_fill: data.sequentialFill,
+        followup_enabled: data.followupEnabled,
+        followup_days: data.followupDays,
         schedule,
         updated_at: new Date().toISOString(),
       },
