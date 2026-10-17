@@ -249,6 +249,46 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
     return;
   }
 
+  // Assinatura e cota do mês. Teste grátis acabado, sem pagamento ou conta
+  // bloqueada: silêncio. Cota esgotada: uma mensagem fixa (sem IA) por mês
+  // nesta conversa e a equipe assume.
+  const { resolveAccess } = await import("@/lib/billing.server");
+  const { canReply, monthStartBR, QUOTA_HANDOFF_MESSAGE } = await import("@/lib/billing-rules");
+  const { access, used } = await resolveAccess(admin, accountId);
+  const allowed = canReply(access, used);
+  if (!allowed.ok) {
+    console.log("[agente] sem resposta:", allowed.reason);
+    if (allowed.reason === "cota_esgotada") {
+      const { data: warned } = await admin
+        .from("messages")
+        .select("id")
+        .eq("conversation_id", conv.id)
+        .eq("author", "agente")
+        .eq("body", QUOTA_HANDOFF_MESSAGE)
+        .gte("created_at", monthStartBR())
+        .limit(1);
+      if ((warned ?? []).length === 0) {
+        await admin.from("messages").insert({
+          conversation_id: conv.id,
+          account_id: accountId,
+          author: "agente",
+          body: QUOTA_HANDOFF_MESSAGE,
+        });
+        await admin
+          .from("conversations")
+          .update({ attention_reason: "Limite de respostas do mês atingido" })
+          .eq("id", conv.id);
+        await sendText({
+          instance: ctx.instance,
+          token: ctx.token,
+          to: phone,
+          text: QUOTA_HANDOFF_MESSAGE,
+        }).catch((e: unknown) => console.error("[agente] aviso de limite", e));
+      }
+    }
+    return;
+  }
+
   // Várias mensagens seguidas ("Lombar", "Dorsal"): cada uma chega num
   // webhook próprio, em paralelo. Só a mais recente responde, vendo todas.
   await new Promise((resolve) => setTimeout(resolve, BURST_WAIT_MS));

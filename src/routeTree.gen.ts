@@ -12,10 +12,13 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as AppAdminRouteImport } from './routes/_app/admin'
 import { Route as AppAgendaRouteImport } from './routes/_app/agenda'
 import { Route as AppAgenteRouteImport } from './routes/_app/agente'
 import { Route as AppConexaoRouteImport } from './routes/_app/conexao'
 import { Route as AppConversasRouteImport } from './routes/_app/conversas'
+import { Route as AppPlanosRouteImport } from './routes/_app/planos'
+import { Route as ApiPublicAsaasWebhookRouteImport } from './routes/api/public/asaas/webhook'
 import { Route as ApiPublicWhatsappWebhookRouteImport } from './routes/api/public/whatsapp/webhook'
 
 const IndexRoute = IndexRouteImport.update({
@@ -31,6 +34,11 @@ const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppAdminRoute = AppAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => AppRoute,
 } as any)
 const AppAgendaRoute = AppAgendaRouteImport.update({
   id: '/agenda',
@@ -52,6 +60,16 @@ const AppConversasRoute = AppConversasRouteImport.update({
   path: '/conversas',
   getParentRoute: () => AppRoute,
 } as any)
+const AppPlanosRoute = AppPlanosRouteImport.update({
+  id: '/planos',
+  path: '/planos',
+  getParentRoute: () => AppRoute,
+} as any)
+const ApiPublicAsaasWebhookRoute = ApiPublicAsaasWebhookRouteImport.update({
+  id: '/api/public/asaas/webhook',
+  path: '/api/public/asaas/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicWhatsappWebhookRoute =
   ApiPublicWhatsappWebhookRouteImport.update({
     id: '/api/public/whatsapp/webhook',
@@ -62,19 +80,25 @@ const ApiPublicWhatsappWebhookRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/admin': typeof AppAdminRoute
   '/agenda': typeof AppAgendaRoute
   '/agente': typeof AppAgenteRoute
   '/conexao': typeof AppConexaoRoute
   '/conversas': typeof AppConversasRoute
+  '/planos': typeof AppPlanosRoute
+  '/api/public/asaas/webhook': typeof ApiPublicAsaasWebhookRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/admin': typeof AppAdminRoute
   '/agenda': typeof AppAgendaRoute
   '/agente': typeof AppAgenteRoute
   '/conexao': typeof AppConexaoRoute
   '/conversas': typeof AppConversasRoute
+  '/planos': typeof AppPlanosRoute
+  '/api/public/asaas/webhook': typeof ApiPublicAsaasWebhookRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRoute
 }
 export interface FileRoutesById {
@@ -82,10 +106,13 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/_app/admin': typeof AppAdminRoute
   '/_app/agenda': typeof AppAgendaRoute
   '/_app/agente': typeof AppAgenteRoute
   '/_app/conexao': typeof AppConexaoRoute
   '/_app/conversas': typeof AppConversasRoute
+  '/_app/planos': typeof AppPlanosRoute
+  '/api/public/asaas/webhook': typeof ApiPublicAsaasWebhookRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRoute
 }
 export interface FileRouteTypes {
@@ -93,29 +120,38 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/admin'
     | '/agenda'
     | '/agente'
     | '/conexao'
     | '/conversas'
+    | '/planos'
+    | '/api/public/asaas/webhook'
     | '/api/public/whatsapp/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
+    | '/admin'
     | '/agenda'
     | '/agente'
     | '/conexao'
     | '/conversas'
+    | '/planos'
+    | '/api/public/asaas/webhook'
     | '/api/public/whatsapp/webhook'
   id:
     | '__root__'
     | '/'
     | '/_app'
     | '/login'
+    | '/_app/admin'
     | '/_app/agenda'
     | '/_app/agente'
     | '/_app/conexao'
     | '/_app/conversas'
+    | '/_app/planos'
+    | '/api/public/asaas/webhook'
     | '/api/public/whatsapp/webhook'
   fileRoutesById: FileRoutesById
 }
@@ -123,6 +159,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
+  ApiPublicAsaasWebhookRoute: typeof ApiPublicAsaasWebhookRoute
   ApiPublicWhatsappWebhookRoute: typeof ApiPublicWhatsappWebhookRoute
 }
 
@@ -148,6 +185,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/admin': {
+      id: '/_app/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AppAdminRouteImport
+      parentRoute: typeof AppRoute
     }
     '/_app/agenda': {
       id: '/_app/agenda'
@@ -177,6 +221,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppConversasRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/planos': {
+      id: '/_app/planos'
+      path: '/planos'
+      fullPath: '/planos'
+      preLoaderRoute: typeof AppPlanosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/api/public/asaas/webhook': {
+      id: '/api/public/asaas/webhook'
+      path: '/api/public/asaas/webhook'
+      fullPath: '/api/public/asaas/webhook'
+      preLoaderRoute: typeof ApiPublicAsaasWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/whatsapp/webhook': {
       id: '/api/public/whatsapp/webhook'
       path: '/api/public/whatsapp/webhook'
@@ -188,17 +246,21 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppAdminRoute: typeof AppAdminRoute
   AppAgendaRoute: typeof AppAgendaRoute
   AppAgenteRoute: typeof AppAgenteRoute
   AppConexaoRoute: typeof AppConexaoRoute
   AppConversasRoute: typeof AppConversasRoute
+  AppPlanosRoute: typeof AppPlanosRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAdminRoute: AppAdminRoute,
   AppAgendaRoute: AppAgendaRoute,
   AppAgenteRoute: AppAgenteRoute,
   AppConexaoRoute: AppConexaoRoute,
   AppConversasRoute: AppConversasRoute,
+  AppPlanosRoute: AppPlanosRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
@@ -207,6 +269,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
+  ApiPublicAsaasWebhookRoute: ApiPublicAsaasWebhookRoute,
   ApiPublicWhatsappWebhookRoute: ApiPublicWhatsappWebhookRoute,
 }
 export const routeTree = rootRouteImport

@@ -37,24 +37,39 @@ Para o WhatsApp alcançar o app no seu computador, abra um túnel (`cloudflared 
    ```
    O app sobe na porta 3000.
 5. **Domínio com HTTPS:** aponte um subdomínio (ex.: `agente.seudominio.com.br`) para a VPS e ponha um proxy com HTTPS na frente da porta 3000 (Caddy, Nginx ou Traefik; se a Evolution já roda nessa VPS, use o mesmo proxy dela). Esse endereço vai em `PUBLIC_APP_URL`; depois de mudar o `.env`, rode `docker compose up -d` de novo.
-6. Abra o app, crie sua conta, conecte o WhatsApp pelo QR Code, escreva as instruções, ponha seu número em "números de teste" e ligue o agente.
+6. **Cobrança (Asaas):** em asaas.com › Integrações, copie a chave da API para `ASAAS_API_KEY`. Em Integrações › Webhooks, crie um webhook de cobranças com a URL `https://SEU_ENDERECO/api/public/asaas/webhook` e um token inventado por você, que vai também em `ASAAS_WEBHOOK_TOKEN`. Ponha seu e-mail de login em `ADMIN_EMAILS`.
+7. Abra o app, crie sua conta, conecte o WhatsApp pelo QR Code, escreva as instruções, ponha seu número em "números de teste" e ligue o agente.
 
 Para atualizar: `git pull && docker compose up -d --build`.
 
+## Planos e cobrança
+
+Cada cliente cria a própria conta e conecta o próprio WhatsApp. Toda conta nova tem 7 dias grátis (até 200 respostas). Depois, o agente só responde com plano pago:
+
+| Plano        | Preço/mês | Respostas/mês |
+| ------------ | --------- | ------------- |
+| Essencial    | R$ 97     | 1.000         |
+| Profissional | R$ 197    | 2.500         |
+| Empresa      | R$ 347    | 5.000         |
+
+O cliente assina na tela Planos (Pix, boleto ou cartão). Atraso: o agente continua 3 dias além do período pago. Limite do mês esgotado: o agente manda uma mensagem fixa e a equipe assume. O dono do app (`ADMIN_EMAILS`) vê o Painel do dono e pode bloquear contas.
+
 ## Estrutura
 
-| Arquivo                                                         | Papel                                                                                                 |
-| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `src/routes/api/public/whatsapp/webhook.ts`                     | Webhook da Evolution (assinatura HMAC por instância)                                                  |
-| `src/lib/agent.server.ts`                                       | Núcleo: conversa, decisão de responder, IA + ferramentas, envio, resumo                               |
-| `src/lib/whatsapp-agent-rules.ts`                               | Regras puras e prompt fixo (testadas)                                                                 |
-| `src/lib/agenda-time.ts`, `agenda-hours.ts`, `agenda.server.ts` | Fuso de Brasília, horário de atendimento, horários livres                                             |
-| `src/lib/evolution.server.ts`                                   | Evolution API: envio, webhook, áudio                                                                  |
-| `src/lib/connection.functions.ts`, `agent.functions.ts`         | Server functions das telas                                                                            |
-| `supabase/migrations/`                                          | Tabelas `accounts`, `whatsapp_connections`, `agent_settings`, `conversations`, `messages`, `bookings` |
+| Arquivo                                                                 | Papel                                                                                                 |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `src/routes/api/public/whatsapp/webhook.ts`                             | Webhook da Evolution (assinatura HMAC por instância)                                                  |
+| `src/lib/agent.server.ts`                                               | Núcleo: conversa, decisão de responder, IA + ferramentas, envio, resumo                               |
+| `src/lib/whatsapp-agent-rules.ts`                                       | Regras puras e prompt fixo (testadas)                                                                 |
+| `src/lib/agenda-time.ts`, `agenda-hours.ts`, `agenda.server.ts`         | Fuso de Brasília, horário de atendimento, horários livres                                             |
+| `src/lib/evolution.server.ts`                                           | Evolution API: envio, webhook, áudio                                                                  |
+| `src/lib/connection.functions.ts`, `agent.functions.ts`                 | Server functions das telas                                                                            |
+| `src/lib/billing-rules.ts`, `billing.server.ts`, `billing.functions.ts` | Planos, teste grátis, cota de respostas e assinatura pelo Asaas                                       |
+| `src/routes/api/public/asaas/webhook.ts`                                | Webhook do Asaas: o plano só vale com o pagamento confirmado                                          |
+| `src/lib/admin.functions.ts`, `src/routes/_app/admin.tsx`               | Painel do dono: contas, uso, WhatsApp, bloqueio, receita e custo                                      |
+| `supabase/migrations/`                                                  | Tabelas `accounts`, `whatsapp_connections`, `agent_settings`, `conversations`, `messages`, `bookings` |
 
 ## Próximas fases
 
-- Cobrança por pacotes de respostas (Asaas), como no FisioAI.
 - Agenda externa opcional (Google Calendar ou o próprio FisioAI).
 - Follow-up de quem parou de responder.

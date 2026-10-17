@@ -47,3 +47,20 @@ export function qrFrom(response: unknown): { qr: string | null; pairingCode: str
     pairingCode: typeof src.pairingCode === "string" && src.pairingCode ? src.pairingCode : null,
   };
 }
+
+/** Situação de cada instância a partir do /instance/fetchInstances (v2 e v1). */
+export function instanceStates(fetchResponse: unknown): Map<string, ManagedState> {
+  const out = new Map<string, ManagedState>();
+  if (!Array.isArray(fetchResponse)) return out;
+  type Item = {
+    name?: unknown;
+    connectionStatus?: string;
+    instance?: { instanceName?: unknown; status?: string };
+  };
+  for (const item of fetchResponse as Item[]) {
+    const name = item?.name ?? item?.instance?.instanceName;
+    const state = item?.connectionStatus ?? item?.instance?.status;
+    if (typeof name === "string" && name) out.set(name, stateFromEvolution(state));
+  }
+  return out;
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  instanceStates,
   instanceTokenFrom,
   managedInstanceName,
   qrFrom,
@@ -33,5 +34,19 @@ describe("WhatsApp gerenciado (QR Code)", () => {
       pairingCode: "WZYX1234",
     });
     expect(qrFrom({ instance: { state: "open" } }).qr).toBeNull();
+  });
+});
+
+describe("instanceStates", () => {
+  it("lê o formato v2 e o v1", () => {
+    const m = instanceStates([
+      { name: "agw_a", connectionStatus: "open" },
+      { instance: { instanceName: "agw_b", status: "close" } },
+      { nada: true },
+    ]);
+    expect(m.get("agw_a")).toBe("conectado");
+    expect(m.get("agw_b")).toBe("desconectado");
+    expect(m.size).toBe(2);
+    expect(instanceStates(null).size).toBe(0);
   });
 });
