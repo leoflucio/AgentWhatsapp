@@ -58,6 +58,7 @@ const HISTORY_LIMIT = 20;
  */
 const HISTORY_WINDOW_HOURS = 12;
 const SUMMARY_EVERY = 12;
+const CALLED_TEAM_MESSAGE = "Vou chamar alguém da equipe para te responder. Só um momento.";
 
 type Ctx = {
   account: { id: string; name: string; address: string | null };
@@ -320,8 +321,21 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
     if (onlyAcknowledgments(bodies, String(lastAgent.body ?? ""))) return;
   }
 
-  const out = await generateAgentReply(admin, { ctx, settings, conv, phone, listed });
+  let out: Awaited<ReturnType<typeof generateAgentReply>>;
+  try {
+    out = await generateAgentReply(admin, { ctx, settings, conv, phone, listed });
+  } catch (e) {
+    // Erro da IA (limite da chave, fora do ar): aparece em Conversas para a equipe.
+    console.error("[agente] IA falhou", e instanceof Error ? e.message : e);
+    await admin
+      .from("conversations")
+      .update({ attention_reason: "O agente não conseguiu responder (erro da IA)" })
+      .eq("id", conv.id);
+    return;
+  }
   const toSend = [out?.text ?? "", ...(out?.followUps ?? [])].filter((t) => t.trim());
+  // Chamou a equipe sem escrever nada: avisa a pessoa em vez de ficar mudo.
+  if (toSend.length === 0 && out?.calledTeam) toSend.push(CALLED_TEAM_MESSAGE);
   if (toSend.length === 0) {
     console.log("[agente] resposta vazia da IA", conv.id);
     return;
@@ -385,13 +399,14 @@ async function findListedContact(
 async function generateAgentReply(
   admin: any,
   args: { ctx: Ctx; settings: any; conv: any; phone: string; listed: ListedContact | null },
-): Promise<{ text: string; followUps: string[]; acted: boolean } | null> {
+): Promise<{ text: string; followUps: string[]; acted: boolean; calledTeam: boolean } | null> {
   const model = aiModel("main");
   if (!model) return null;
   // Mensagens automáticas enviadas depois da resposta (endereço).
   const followUps: string[] = [];
   // Alguma ferramenta mudou a agenda ou chamou a equipe nesta resposta.
   let acted = false;
+  let calledTeam = false;
   const { ctx, settings, conv, phone, listed } = args;
   const accountId = ctx.account.id;
   // A IA só vê e devolve data e hora LOCAIS (Brasília). Nunca ISO/UTC: com
@@ -730,6 +745,7 @@ async function generateAgentReply(
       inputSchema: z.object({ motivo: z.string().describe("Motivo curto") }),
       execute: async ({ motivo }) => {
         acted = true;
+        calledTeam = true;
         await admin
           .from("conversations")
           .update({
@@ -815,11 +831,16 @@ async function generateAgentReply(
       )) as string | Free | { ofereca: Free };
       const slots = typeof free === "string" ? [] : Array.isArray(free) ? free : free.ofereca;
       const text = offerText(slots);
-      return { text: text ?? (typeof free === "string" ? free : ""), followUps, acted };
+      return {
+        text: text ?? (typeof free === "string" ? free : ""),
+        followUps,
+        acted,
+        calledTeam,
+      };
     }
   }
   const reply = stripClosingOffer(cleanReply(result.text));
-  return { text: reply, followUps, acted };
+  return { text: reply, followUps, acted, calledTeam };
 }
 
 /** Atualiza o resumo da conversa a cada SUMMARY_EVERY mensagens (memória longa). */

@@ -22,7 +22,10 @@ export const Route = createFileRoute("/api/public/whatsapp/webhook")({
           return Response.json({ ok: true });
         }
         const { handleAgentWebhook } = await import("@/lib/agent.server");
-        await handleAgentWebhook(instance, payload);
+        // Sempre 200: um erro aqui não pode virar reenvio do mesmo evento.
+        await handleAgentWebhook(instance, payload).catch((e: unknown) =>
+          console.error("[agente] webhook falhou", e instanceof Error ? e.stack : e),
+        );
         return Response.json({ ok: true });
       },
     },
