@@ -60,6 +60,8 @@ export const checkoutPlan = createServerFn({ method: "POST" })
     if (!isPlan(plan)) throw new Error("Plano inválido.");
     const email = await userEmail(admin, context.userId);
     if (isAdminEmail(email)) throw new Error("Sua conta é a do dono do app e não paga plano.");
+    const { data: acc } = await admin.from("accounts").select("free").eq("id", account.id).single();
+    if (acc?.free) throw new Error("Sua conta já está liberada sem cobrança.");
 
     const sub = await loadSubscription(admin, account.id);
     const today = todayLocalISO();

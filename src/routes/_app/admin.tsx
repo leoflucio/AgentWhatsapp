@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { adminOverview, setAccountBlocked } from "@/lib/admin.functions";
+import { adminOverview, setAccountBlocked, setAccountFree } from "@/lib/admin.functions";
 import { PLANS, type PlanId } from "@/lib/billing-rules";
 
 export const Route = createFileRoute("/_app/admin")({ component: AdminPage });
@@ -16,7 +16,7 @@ const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "";
 
 const KIND_LABEL = {
-  isento: "Dono",
+  isento: "Grátis",
   plano: "Plano",
   teste: "Teste grátis",
   vencido: "Sem plano",
@@ -52,6 +52,18 @@ function AdminPage() {
     setBusy(id);
     try {
       await setAccountBlocked({ data: { accountId: id, blocked } });
+      await q.refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível salvar.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const toggleFree = async (id: string, free: boolean) => {
+    setBusy(id);
+    try {
+      await setAccountFree({ data: { accountId: id, free } });
       await q.refetch();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Não foi possível salvar.");
@@ -115,7 +127,7 @@ function AdminPage() {
                           : "secondary"
                     }
                   >
-                    {plan ? plan.label : KIND_LABEL[r.access.kind]}
+                    {r.owner ? "Dono" : plan ? plan.label : KIND_LABEL[r.access.kind]}
                   </Badge>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {r.access.kind === "teste" && `Teste até ${fmtDate(r.access.trialEndsAt)}`}
@@ -135,7 +147,17 @@ function AdminPage() {
                   </p>
                   <p className="text-xs text-muted-foreground">Respostas no mês</p>
                 </div>
-                {r.access.kind !== "isento" && (
+                {!r.owner && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy === r.id}
+                    onClick={() => void toggleFree(r.id, !r.free)}
+                  >
+                    {r.free ? "Voltar a cobrar" : "Liberar grátis"}
+                  </Button>
+                )}
+                {!r.owner && (
                   <Button
                     size="sm"
                     variant={r.blocked ? "default" : "outline"}

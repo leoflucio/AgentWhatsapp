@@ -17,7 +17,7 @@ export const adminOverview = createServerFn({ method: "POST" })
     const [accountsR, subsR, connR, usersR, instancesR] = await Promise.all([
       admin
         .from("accounts")
-        .select("id, owner_id, name, created_at, blocked")
+        .select("id, owner_id, name, created_at, blocked, free")
         .order("created_at", { ascending: false }),
       admin.from("subscriptions").select("*"),
       admin.from("whatsapp_connections").select("account_id, instance"),
@@ -49,7 +49,7 @@ export const adminOverview = createServerFn({ method: "POST" })
         sub,
         accountCreatedAt: a.created_at,
         blocked: Boolean(a.blocked),
-        exempt: isAdminEmail(email),
+        exempt: isAdminEmail(email) || Boolean(a.free),
       });
       const instance = managedInstanceName(a.id);
       return {
@@ -58,6 +58,8 @@ export const adminOverview = createServerFn({ method: "POST" })
         email,
         createdAt: a.created_at as string,
         blocked: Boolean(a.blocked),
+        free: Boolean(a.free),
+        owner: isAdminEmail(email),
         access,
         status: (sub?.status as string | null) ?? null,
         periodEnd: (sub?.current_period_end as string | null) ?? null,
@@ -78,6 +80,21 @@ export const setAccountBlocked = createServerFn({ method: "POST" })
     const { error } = await admin
       .from("accounts")
       .update({ blocked: data.blocked })
+      .eq("id", data.accountId);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+/** Libera a conta sem cobrança e sem limite (ex.: conta da família), sem dar acesso ao painel. */
+export const setAccountFree = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ accountId: z.string().uuid(), free: z.boolean() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { requireAdmin } = await import("@/lib/billing.server");
+    const admin = await requireAdmin(context.userId);
+    const { error } = await admin
+      .from("accounts")
+      .update({ free: data.free })
       .eq("id", data.accountId);
     if (error) throw new Error(error.message);
     return { ok: true };

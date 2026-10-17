@@ -52,7 +52,7 @@ Cada cliente cria a própria conta e conecta o próprio WhatsApp. Toda conta nov
 | Profissional | R$ 197    | 2.500         |
 | Empresa      | R$ 347    | 5.000         |
 
-O cliente assina na tela Planos (Pix, boleto ou cartão). Atraso: o agente continua 3 dias além do período pago. Limite do mês esgotado: o agente manda uma mensagem fixa e a equipe assume. O dono do app (`ADMIN_EMAILS`) vê o Painel do dono e pode bloquear contas.
+O cliente assina na tela Planos (Pix, boleto ou cartão). Atraso: o agente continua 3 dias além do período pago. Limite do mês esgotado: o agente manda uma mensagem fixa e a equipe assume. O dono do app (`ADMIN_EMAILS`) vê o Painel do dono, pode bloquear contas e liberar uma conta grátis (sem limite, sem acesso ao painel).
 
 ## Estrutura
 

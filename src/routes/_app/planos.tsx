@@ -68,7 +68,7 @@ function PlanosPage() {
   const situation = (() => {
     switch (b.kind) {
       case "isento":
-        return "Conta do dono do app: sem limite e sem cobrança.";
+        return "Conta liberada: sem limite e sem cobrança.";
       case "bloqueado":
         return "Sua conta está bloqueada. Fale com o suporte.";
       case "teste":

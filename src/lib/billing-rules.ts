@@ -5,7 +5,8 @@
  * - Toda conta nova ganha TRIAL_DAYS dias grátis, com até TRIAL_REPLIES respostas.
  * - O plano só vale quando o pagamento é confirmado (webhook do Asaas).
  * - Pagamento atrasado: o agente continua por GRACE_DAYS dias depois do fim do período.
- * - Conta bloqueada pelo dono do app não responde; contas de admin não têm limite.
+ * - Conta bloqueada pelo dono do app não responde; contas de admin e as liberadas
+ *   grátis pelo dono (`accounts.free`) não pagam nem têm limite.
  */
 
 export type PlanId = "essencial" | "profissional" | "empresa";
@@ -69,8 +70,8 @@ export function accountAccess(args: {
   const now = args.now ?? Date.now();
   const trialEnd = trialEndsAt(args.accountCreatedAt);
   const base = { trialEndsAt: trialEnd };
-  if (args.exempt) return { ...base, kind: "isento", plan: null, limit: null };
   if (args.blocked) return { ...base, kind: "bloqueado", plan: null, limit: 0 };
+  if (args.exempt) return { ...base, kind: "isento", plan: null, limit: null };
   if (planActive(args.sub, now)) {
     const id = args.sub!.plan as PlanId;
     return { ...base, kind: "plano", plan: id, limit: PLANS[id].replies };

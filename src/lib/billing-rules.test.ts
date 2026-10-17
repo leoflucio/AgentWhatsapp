@@ -204,3 +204,16 @@ describe("assinatura — utilidades", () => {
     });
   });
 });
+
+describe("assinatura — conta liberada grátis", () => {
+  it("bloqueio vale até para conta liberada", () => {
+    const a = accountAccess({
+      sub: null,
+      accountCreatedAt: new Date(NOW - 30 * day).toISOString(),
+      blocked: true,
+      exempt: true,
+      now: NOW,
+    });
+    expect(a.kind).toBe("bloqueado");
+  });
+});

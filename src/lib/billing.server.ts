@@ -72,7 +72,7 @@ export async function resolveAccess(
 ): Promise<{ access: Access; sub: SubscriptionRow | null; used: number }> {
   const { data: account, error } = await admin
     .from("accounts")
-    .select("owner_id, created_at, blocked")
+    .select("owner_id, created_at, blocked, free")
     .eq("id", accountId)
     .single();
   if (error || !account) throw new Error("Conta não encontrada.");
@@ -85,7 +85,7 @@ export async function resolveAccess(
     sub,
     accountCreatedAt: account.created_at,
     blocked: Boolean(account.blocked),
-    exempt: isAdminEmail(email),
+    exempt: isAdminEmail(email) || Boolean(account.free),
   });
   return { access, sub, used };
 }
