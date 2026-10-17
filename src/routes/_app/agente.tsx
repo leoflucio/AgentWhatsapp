@@ -231,7 +231,7 @@ function AgentePage() {
             const [win, ...rest] = s.schedule[day] ?? [];
             return (
               <div key={day} className="flex flex-wrap items-center gap-2">
-                <label className="flex w-32 items-center gap-2 text-sm">
+                <label className="flex w-full items-center gap-2 text-sm sm:w-32">
                   <input
                     type="checkbox"
                     checked={Boolean(win)}

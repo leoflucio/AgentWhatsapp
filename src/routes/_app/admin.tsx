@@ -95,10 +95,10 @@ function AdminPage() {
       </div>
 
       <Card>
-        <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
+        <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0">
           <CardTitle>Clientes</CardTitle>
           <Input
-            className="max-w-xs"
+            className="w-full sm:max-w-xs"
             placeholder="Buscar por nome ou e-mail"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
@@ -112,12 +112,12 @@ function AdminPage() {
             const plan = r.access.plan ? PLANS[r.access.plan as PlanId] : null;
             return (
               <div key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 p-4 text-sm">
-                <div className="min-w-48 flex-1">
+                <div className="w-full min-w-0 flex-1 sm:w-auto sm:min-w-48">
                   <p className="font-medium">{r.name}</p>
-                  <p className="text-muted-foreground">{r.email}</p>
+                  <p className="break-all text-muted-foreground">{r.email}</p>
                   <p className="text-xs text-muted-foreground">Desde {fmtDate(r.createdAt)}</p>
                 </div>
-                <div className="w-40">
+                <div className="w-full sm:w-40">
                   <Badge
                     variant={
                       r.access.kind === "plano"
@@ -136,11 +136,11 @@ function AdminPage() {
                     {r.pendingPlan && ` · aguardando ${PLANS[r.pendingPlan as PlanId]?.label}`}
                   </p>
                 </div>
-                <div className="w-32">
+                <div className="w-[45%] sm:w-32">
                   <p>{WA_LABEL[r.whatsapp] ?? r.whatsapp}</p>
                   <p className="text-xs text-muted-foreground">WhatsApp</p>
                 </div>
-                <div className="w-32">
+                <div className="w-[45%] sm:w-32">
                   <p>
                     {r.repliesThisMonth.toLocaleString("pt-BR")}
                     {r.access.limit ? ` / ${r.access.limit.toLocaleString("pt-BR")}` : ""}

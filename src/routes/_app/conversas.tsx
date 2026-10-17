@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,8 +68,9 @@ function ConversasPage() {
   };
 
   return (
-    <div className="grid gap-4 md:grid-cols-[320px_1fr]">
-      <Card>
+    <div className="grid gap-4 md:grid-cols-[280px_1fr] lg:grid-cols-[320px_1fr]">
+      {/* No celular, a lista some quando uma conversa está aberta. */}
+      <Card className={cn(open && "hidden md:block")}>
         <CardContent className="divide-y p-0">
           {(list.data ?? []).length === 0 && (
             <p className="p-4 text-sm text-muted-foreground">
@@ -104,14 +106,25 @@ function ConversasPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className={cn(!open && "hidden md:block")}>
         <CardContent className="space-y-4 p-4">
+          {open && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="-ml-2 md:hidden"
+              onClick={() => setOpenId(null)}
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Conversas
+            </Button>
+          )}
           {!open ? (
             <p className="text-sm text-muted-foreground">Escolha uma conversa.</p>
           ) : (
             <>
               <div className="flex flex-wrap items-center gap-2">
-                <div className="mr-auto">
+                <div className="mr-auto min-w-0">
                   <div className="font-medium">{open.contact_name || "Sem nome"}</div>
                   <div className="text-sm text-muted-foreground">{formatWhatsApp(open.phone)}</div>
                 </div>
@@ -171,7 +184,7 @@ function ConversasPage() {
                   <strong>Resumo:</strong> {open.summary}
                 </p>
               )}
-              <div className="max-h-[60vh] space-y-2 overflow-y-auto">
+              <div className="max-h-[60vh] space-y-2 overflow-y-auto break-words">
                 {(msgs.data ?? []).map((m) => (
                   <div
                     key={m.id}

@@ -175,9 +175,9 @@ function ContatosPage() {
       <Card>
         <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0">
           <CardTitle>Contatos ({total.toLocaleString("pt-BR")})</CardTitle>
-          <div className="flex gap-2">
+          <div className="flex w-full gap-2 sm:w-auto">
             <Input
-              className="max-w-xs"
+              className="min-w-0 sm:w-64"
               placeholder="Buscar por nome ou telefone"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -240,7 +240,7 @@ function ContatosPage() {
             )}
             {rows.map((c) => (
               <div key={c.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 p-4 text-sm">
-                <div className="min-w-48 flex-1">
+                <div className="w-full min-w-0 flex-1 sm:w-auto sm:min-w-48">
                   <p className="font-medium">
                     {c.name || "Sem nome"}{" "}
                     {c.is_client && <Badge variant="secondary">Cliente</Badge>}
