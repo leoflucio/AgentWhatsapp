@@ -236,19 +236,40 @@ export type BookingRow = {
   ends_at: string;
 };
 
+/** Próximos horários, ou os de um intervalo de datas locais (grade dia/semana). */
 export const listBookings = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .inputValidator((d) =>
+    z
+      .object({
+        from: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+        to: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+      })
+      .parse(d ?? {}),
+  )
+  .handler(async ({ data, context }) => {
     const { admin, account } = await adminAndAccount(context.userId);
-    const { data } = await admin
+    let q = admin
       .from("bookings")
       .select("id, kind, status, contact_name, phone, notes, starts_at, ends_at")
       .eq("account_id", account.id)
-      .neq("status", "cancelado")
-      .gte("ends_at", new Date().toISOString())
-      .order("starts_at", { ascending: true })
-      .limit(300);
-    return (data ?? []) as BookingRow[];
+      .neq("status", "cancelado");
+    if (data.from && data.to) {
+      const { addDaysISO, localToUTC } = await import("@/lib/agenda-time");
+      q = q
+        .gte("ends_at", localToUTC(data.from, 0).toISOString())
+        .lt("starts_at", localToUTC(addDaysISO(data.to, 1), 0).toISOString());
+    } else {
+      q = q.gte("ends_at", new Date().toISOString());
+    }
+    const { data: rows } = await q.order("starts_at", { ascending: true }).limit(500);
+    return (rows ?? []) as BookingRow[];
   });
 
 export const setBookingStatus = createServerFn({ method: "POST" })
