@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { adminOverview, setAccountBlocked, setAccountFree } from "@/lib/admin.functions";
 import { PLANS, type PlanId } from "@/lib/billing-rules";
+import { formatWhatsApp, onlyDigits } from "@/lib/phone";
 
 export const Route = createFileRoute("/_app/admin")({ component: AdminPage });
 
@@ -45,7 +46,13 @@ function AdminPage() {
   if (!q.data) return <p className="text-sm text-muted-foreground">Carregando…</p>;
   const { rows, totals } = q.data;
   const f = filter.trim().toLowerCase();
-  const shown = f ? rows.filter((r) => `${r.name} ${r.email}`.toLowerCase().includes(f)) : rows;
+  const shown = f
+    ? rows.filter(
+        (r) =>
+          `${r.name} ${r.email} ${r.ownerName ?? ""}`.toLowerCase().includes(f) ||
+          (onlyDigits(f).length >= 4 && (r.ownerPhone ?? "").includes(onlyDigits(f))),
+      )
+    : rows;
 
   const toggle = async (id: string, blocked: boolean) => {
     if (blocked && !window.confirm("Bloquear esta conta? O agente dela para de responder.")) return;
@@ -99,7 +106,7 @@ function AdminPage() {
           <CardTitle>Clientes</CardTitle>
           <Input
             className="w-full sm:max-w-xs"
-            placeholder="Buscar por nome ou e-mail"
+            placeholder="Buscar por nome, e-mail ou celular"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
@@ -114,7 +121,11 @@ function AdminPage() {
               <div key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 p-4 text-sm">
                 <div className="w-full min-w-0 flex-1 sm:w-auto sm:min-w-48">
                   <p className="font-medium">{r.name}</p>
+                  {r.ownerName && <p className="text-sm">{r.ownerName}</p>}
                   <p className="break-all text-muted-foreground">{r.email}</p>
+                  {r.ownerPhone && (
+                    <p className="text-muted-foreground">{formatWhatsApp(r.ownerPhone)}</p>
+                  )}
                   <p className="text-xs text-muted-foreground">Desde {fmtDate(r.createdAt)}</p>
                 </div>
                 <div className="w-full sm:w-40">

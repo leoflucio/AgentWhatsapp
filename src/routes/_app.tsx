@@ -10,7 +10,9 @@ import {
   Shield,
   Users,
 } from "lucide-react";
+import { CompleteProfile } from "@/components/CompleteProfile";
 import { useAuth } from "@/lib/auth-context";
+import { getProfile } from "@/lib/profile.functions";
 import { getBilling } from "@/lib/billing.functions";
 import { cn } from "@/lib/utils";
 
@@ -65,6 +67,11 @@ function AppLayout() {
     queryFn: () => getBilling(),
     enabled: Boolean(session),
   });
+  const profile = useQuery({
+    queryKey: ["perfil"],
+    queryFn: () => getProfile(),
+    enabled: Boolean(session),
+  });
   if (loading) return null;
   if (!session) return <Navigate to="/login" />;
   const links = billing.data?.isAdmin
@@ -101,7 +108,11 @@ function AppLayout() {
       </header>
       {billing.data && <BillingBanner b={billing.data} />}
       <main className="mx-auto max-w-5xl px-3 py-4 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:px-4 sm:py-6 lg:pb-6">
-        <Outlet />
+        {profile.data && !profile.data.complete ? (
+          <CompleteProfile suggestedName={profile.data.suggestedName} />
+        ) : (
+          <Outlet />
+        )}
       </main>
       {/* No celular e no tablet em pé, menu fixo embaixo (cabe sem virar a tela). */}
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t bg-card pb-[env(safe-area-inset-bottom)] lg:hidden">

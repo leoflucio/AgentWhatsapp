@@ -17,7 +17,7 @@ export const adminOverview = createServerFn({ method: "POST" })
     const [accountsR, subsR, connR, usersR, instancesR] = await Promise.all([
       admin
         .from("accounts")
-        .select("id, owner_id, name, created_at, blocked, free")
+        .select("id, owner_id, name, created_at, blocked, free, owner_name, owner_phone")
         .order("created_at", { ascending: false }),
       admin.from("subscriptions").select("*"),
       admin.from("whatsapp_connections").select("account_id, instance"),
@@ -56,6 +56,8 @@ export const adminOverview = createServerFn({ method: "POST" })
         id: a.id as string,
         name: a.name as string,
         email,
+        ownerName: (a.owner_name as string | null) ?? null,
+        ownerPhone: (a.owner_phone as string | null) ?? null,
         createdAt: a.created_at as string,
         blocked: Boolean(a.blocked),
         free: Boolean(a.free),

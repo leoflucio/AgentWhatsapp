@@ -19,6 +19,13 @@ export const getBilling = createServerFn({ method: "POST" })
     const { resolveAccess, isAdminEmail, userEmail } = await import("@/lib/billing.server");
     const { access, sub, used } = await resolveAccess(admin, account.id);
     const { asaasConfigured, openInvoiceUrl } = await import("@/lib/asaas.server");
+    // CPF/CNPJ do cadastro dispensa pedir de novo na cobrança.
+    const { data: prof } = await admin
+      .from("accounts")
+      .select("owner_doc")
+      .eq("id", account.id)
+      .maybeSingle()
+      .then((r: any) => (r.error ? { data: null } : r));
     const pendingInvoiceUrl =
       sub?.pending_subscription_id && asaasConfigured()
         ? await openInvoiceUrl(sub.pending_subscription_id)
@@ -34,6 +41,7 @@ export const getBilling = createServerFn({ method: "POST" })
       pendingPlan: sub?.pending_plan ?? null,
       pendingInvoiceUrl,
       hasCustomer: Boolean(sub?.asaas_customer_id),
+      hasProfileDoc: Boolean(prof?.owner_doc),
       isAdmin: isAdminEmail(await userEmail(admin, context.userId)),
       billingAvailable: asaasConfigured(),
     };
@@ -78,10 +86,16 @@ export const checkoutPlan = createServerFn({ method: "POST" })
     // Cliente no Asaas (pede CPF/CNPJ na primeira vez).
     let customerId = sub?.asaas_customer_id ?? null;
     if (!customerId) {
-      const doc = (data.cpfCnpj ?? "").replace(/\D/g, "");
+      const { data: prof } = await admin
+        .from("accounts")
+        .select("owner_name, owner_doc")
+        .eq("id", account.id)
+        .maybeSingle()
+        .then((r: any) => (r.error ? { data: null } : r));
+      const doc = (data.cpfCnpj || prof?.owner_doc || "").replace(/\D/g, "");
       if (!validCpfCnpj(doc)) throw new Error("Informe um CPF ou CNPJ válido para a cobrança.");
       const customer = await asaas.createCustomer({
-        name: data.name || account.name || email || "Cliente",
+        name: data.name || prof?.owner_name || account.name || email || "Cliente",
         email: email ?? undefined,
         cpfCnpj: doc,
         externalReference: account.id,

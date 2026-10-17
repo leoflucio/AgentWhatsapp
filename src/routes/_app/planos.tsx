@@ -131,7 +131,8 @@ function PlanosPage() {
               A cobrança ainda não foi configurada neste servidor (ASAAS_API_KEY).
             </p>
           ) : (
-            !b.hasCustomer && (
+            !b.hasCustomer &&
+            !b.hasProfileDoc && (
               <Card>
                 <CardHeader>
                   <CardTitle>Dados para a cobrança</CardTitle>
