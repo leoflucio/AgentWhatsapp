@@ -98,7 +98,7 @@ export async function transcribeAudio(
   messageId: string | undefined,
   mimetype: string,
 ): Promise<string | null> {
-  const groqKey = process.env.GROQ_API_KEY;
+  const groqKey = process.env.GROQ_API_KEY?.trim();
   if (!groqKey || !hostConfigured() || !messageId) return null;
   try {
     const media = await evo(`/chat/getBase64FromMediaMessage/${encodeURIComponent(instance)}`, {
