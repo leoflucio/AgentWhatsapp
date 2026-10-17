@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -90,6 +90,15 @@ function LoginPage() {
           >
             {mode === "entrar" ? "Ainda não tem conta? Criar conta" : "Já tem conta? Entrar"}
           </button>
+          <p className="mt-6 text-center text-xs text-muted-foreground">
+            <Link to="/privacidade" className="underline">
+              Privacidade
+            </Link>
+            {" · "}
+            <Link to="/excluir-conta" className="underline">
+              Excluir conta
+            </Link>
+          </p>
         </CardContent>
       </Card>
     </div>
