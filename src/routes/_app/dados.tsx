@@ -121,6 +121,29 @@ function DadosPage() {
     }
   };
 
+  const deleteSheet = async (target: DataSheet) => {
+    if (
+      !window.confirm(
+        `Apagar a planilha "${target.name}"? O agente para de anotar nela. O que já foi anotado não é apagado.`,
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      await saveDataSheets({
+        data: { sheets: sheets.filter((s) => s.key !== target.key) },
+      });
+      if (active === target.key) setActive(null);
+      setRow(null);
+      await q.refetch();
+      toast.success(`Planilha "${target.name}" apagada.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível apagar.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const saveRow = async () => {
     if (!row) return;
     setBusy(true);
@@ -209,13 +232,24 @@ function DadosPage() {
           ) : (
             <div className="space-y-1">
               {sheets.map((s) => (
-                <p key={s.key}>
-                  <b>{s.name}:</b>{" "}
-                  <span className="text-muted-foreground">
-                    {s.fields.map((f) => f.label + (f.ask ? " (pedir)" : "")).join(", ") ||
-                      "sem campos"}
-                  </span>
-                </p>
+                <div key={s.key} className="flex items-start justify-between gap-2">
+                  <p>
+                    <b>{s.name}:</b>{" "}
+                    <span className="text-muted-foreground">
+                      {s.fields.map((f) => f.label + (f.ask ? " (pedir)" : "")).join(", ") ||
+                        "sem campos"}
+                    </span>
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 text-destructive"
+                    disabled={busy}
+                    onClick={() => void deleteSheet(s)}
+                  >
+                    Apagar
+                  </Button>
+                </div>
               ))}
             </div>
           )}
@@ -336,6 +370,7 @@ function SheetsEditor({
               onClick={() => {
                 if (window.confirm(`Tirar a planilha "${s.name || "sem nome"}"?`)) {
                   setDraft(draft.filter((_, j) => j !== i));
+                  toast.info("Clique em Salvar planilhas, lá embaixo, para confirmar.");
                 }
               }}
             >
