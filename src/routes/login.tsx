@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -9,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { checkProfile, maskDoc } from "@/lib/profile-rules";
 import { maskPhone } from "@/lib/phone";
+import { getGoogleClientId } from "@/lib/google-login.functions";
+import { googleId, loadGoogleIdentity, makeNonce } from "@/lib/google-identity";
 
 export const Route = createFileRoute("/login")({ component: LoginPage });
 
@@ -22,18 +25,6 @@ function LoginPage() {
   const [phone, setPhone] = useState("");
   const [doc, setDoc] = useState("");
   const [busy, setBusy] = useState(false);
-
-  const google = async () => {
-    setBusy(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/conversas` },
-    });
-    if (error) {
-      toast.error("Não foi possível entrar com o Google.");
-      setBusy(false);
-    }
-  };
 
   useEffect(() => {
     if (session) void navigate({ to: "/conversas" });
@@ -78,16 +69,7 @@ function LoginPage() {
           </p>
         </CardHeader>
         <CardContent>
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            disabled={busy}
-            onClick={() => void google()}
-          >
-            <GoogleIcon />
-            {mode === "entrar" ? "Entrar com Google" : "Criar conta com Google"}
-          </Button>
+          <GoogleLogin mode={mode} busy={busy} setBusy={setBusy} />
           <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
             <span className="h-px flex-1 bg-border" />
             ou com e-mail
@@ -180,6 +162,101 @@ function LoginPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+/**
+ * Com GOOGLE_CLIENT_ID no servidor, usa o botão do próprio Google no nosso domínio
+ * (a tela do Google mostra o app, não o endereço do Supabase). Sem ele, o redirecionamento do Supabase.
+ */
+function GoogleLogin({
+  mode,
+  busy,
+  setBusy,
+}: {
+  mode: "entrar" | "criar";
+  busy: boolean;
+  setBusy: (b: boolean) => void;
+}) {
+  const cfg = useQuery({
+    queryKey: ["google-client-id"],
+    queryFn: () => getGoogleClientId(),
+    staleTime: Infinity,
+  });
+  const clientId = cfg.data?.clientId ?? "";
+  const box = useRef<HTMLDivElement>(null);
+  const [gisFailed, setGisFailed] = useState(false);
+
+  useEffect(() => {
+    if (!clientId || !box.current) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await loadGoogleIdentity();
+        const nonce = await makeNonce();
+        if (cancelled || !box.current) return;
+        googleId().initialize({
+          client_id: clientId,
+          nonce: nonce.hashed,
+          ux_mode: "popup",
+          callback: async (resp: { credential?: string }) => {
+            if (!resp.credential) return;
+            setBusy(true);
+            const { error } = await supabase.auth.signInWithIdToken({
+              provider: "google",
+              token: resp.credential,
+              nonce: nonce.raw,
+            });
+            if (error) {
+              toast.error("Não foi possível entrar com o Google.");
+              setBusy(false);
+            }
+          },
+        });
+        box.current.innerHTML = "";
+        googleId().renderButton(box.current, {
+          type: "standard",
+          theme: "outline",
+          size: "large",
+          shape: "rectangular",
+          text: mode === "entrar" ? "signin_with" : "signup_with",
+          locale: "pt-BR",
+          width: Math.min(400, box.current.offsetWidth || 320),
+        });
+      } catch {
+        if (!cancelled) setGisFailed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId, mode, setBusy]);
+
+  const redirect = async () => {
+    setBusy(true);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/conversas` },
+    });
+    if (error) {
+      toast.error("Não foi possível entrar com o Google.");
+      setBusy(false);
+    }
+  };
+
+  if (cfg.isPending) return <div className="h-10" />;
+  if (clientId && !gisFailed) return <div ref={box} className="flex h-10 w-full justify-center" />;
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      className="w-full"
+      disabled={busy}
+      onClick={() => void redirect()}
+    >
+      <GoogleIcon />
+      {mode === "entrar" ? "Entrar com Google" : "Criar conta com Google"}
+    </Button>
   );
 }
 
