@@ -837,7 +837,9 @@ async function generateAgentReply(
       activeTools,
       stopWhen: stepCountIs(8),
       temperature: 0.3,
-      maxRetries: 1,
+      // Limite por minuto do Gemini (429 "Too Many Requests"): tenta de novo
+      // com espera crescente (2 s, 4 s, 8 s) antes de desistir.
+      maxRetries: 3,
     });
   let result = await run(messages);
   // Resposta que só promete "vou verificar" (sem trazer os horários): roda de
@@ -877,7 +879,7 @@ async function generateAgentReply(
         stepNumber === 0 ? { toolChoice: "required" as const } : {},
       stopWhen: stepCountIs(8),
       temperature: 0.3,
-      maxRetries: 1,
+      maxRetries: 3,
     });
     if (retry.text.trim() && verified(retry)) {
       result = retry;
