@@ -538,21 +538,37 @@ export function inPeriod(hora: string, periodo: DayPeriod | null | undefined): b
   return h >= 18;
 }
 
-/** Opções de "devolver ao agente depois de X minutos sem a equipe responder". */
-export const TAKEOVER_OPTIONS = [15, 30, 60, 120, 240, 1440] as const;
-export const DEFAULT_TAKEOVER_MINUTES = 30;
-/** Quando o agente chama a equipe, espera mais antes de voltar a responder. */
-export const CALL_TEAM_MINUTES = 240;
+/**
+ * Depois que a equipe responde pelo celular (ou o agente chama a equipe), o
+ * agente volta a responder sozinho depois de X minutos. 0 = não volta sozinho:
+ * só pelo botão "Devolver ao agente".
+ */
+export const NO_AUTO_RETURN = 0;
+export const TAKEOVER_OPTIONS = [5, 15, 30, 60, 120, 240, 1440, NO_AUTO_RETURN] as const;
+export const DEFAULT_TAKEOVER_MINUTES = 5;
 
 export function clampTakeoverMinutes(v: unknown): number {
+  if (v === null || v === undefined || v === "") return DEFAULT_TAKEOVER_MINUTES;
   const n = Math.round(Number(v));
-  if (!Number.isFinite(n) || n <= 0) return DEFAULT_TAKEOVER_MINUTES;
+  if (n === NO_AUTO_RETURN) return NO_AUTO_RETURN;
+  if (!Number.isFinite(n) || n < 0) return DEFAULT_TAKEOVER_MINUTES;
   return Math.min(1440, Math.max(5, n));
 }
 
-/** Até quando a equipe fica com a conversa a partir de agora. */
+/** Até quando a equipe fica com a conversa a partir de agora (com volta automática). */
 export function takeoverUntilISO(nowMs: number, minutes: number): string {
-  return new Date(nowMs + clampTakeoverMinutes(minutes) * 60_000).toISOString();
+  const m = clampTakeoverMinutes(minutes) || DEFAULT_TAKEOVER_MINUTES;
+  return new Date(nowMs + m * 60_000).toISOString();
+}
+
+/** Campos da conversa quando a equipe assume: prazo, ou sem volta automática. */
+export function takeoverPatch(
+  nowMs: number,
+  minutes: unknown,
+): { takeover_until: string } | { human_takeover: true; takeover_until: null } {
+  const m = clampTakeoverMinutes(minutes);
+  if (m === NO_AUTO_RETURN) return { human_takeover: true, takeover_until: null };
+  return { takeover_until: takeoverUntilISO(nowMs, m) };
 }
 
 /**
@@ -569,6 +585,7 @@ export function takeoverUntilText(untilISO: string, nowMs: number): string {
 
 /** "15 minutos", "1 hora", "24 horas". */
 export function takeoverLabel(minutes: number): string {
+  if (minutes === NO_AUTO_RETURN) return "Não voltar sozinho (só pelo botão Devolver ao agente)";
   if (minutes < 60) return `${minutes} minutos`;
   const h = minutes / 60;
   return `${h} ${h === 1 ? "hora" : "horas"}`;

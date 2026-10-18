@@ -11,6 +11,7 @@ import {
   calendarText,
   clampTakeoverMinutes,
   takeoverLabel,
+  takeoverPatch,
   takeoverUntilISO,
   takeoverUntilText,
   inPeriod,
@@ -423,9 +424,17 @@ describe("devolução automática ao agente", () => {
   it("prazo a partir de agora, com padrão e limites", () => {
     const now = Date.parse("2026-10-08T12:00:00Z");
     expect(takeoverUntilISO(now, 30)).toBe("2026-10-08T12:30:00.000Z");
-    expect(clampTakeoverMinutes(undefined)).toBe(30);
+    expect(clampTakeoverMinutes(undefined)).toBe(5);
+    expect(clampTakeoverMinutes(null)).toBe(5);
+    expect(clampTakeoverMinutes(0)).toBe(0);
     expect(clampTakeoverMinutes(1)).toBe(5);
     expect(clampTakeoverMinutes(99999)).toBe(1440);
+  });
+  it("volta sozinho em 5 minutos por padrão; 0 desliga a volta automática", () => {
+    const now = Date.parse("2026-10-08T12:00:00Z");
+    expect(takeoverPatch(now, undefined)).toEqual({ takeover_until: "2026-10-08T12:05:00.000Z" });
+    expect(takeoverPatch(now, 0)).toEqual({ human_takeover: true, takeover_until: null });
+    expect(takeoverLabel(0)).toContain("Devolver ao agente");
   });
   it("rótulos", () => {
     expect(takeoverLabel(30)).toBe("30 minutos");

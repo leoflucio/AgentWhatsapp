@@ -26,10 +26,7 @@ import {
   buildSystemPrompt,
   cameFromAd,
   cleanReply,
-  CALL_TEAM_MINUTES,
-  clampTakeoverMinutes,
-  DEFAULT_TAKEOVER_MINUTES,
-  takeoverUntilISO,
+  takeoverPatch,
   announcesCheckOnly,
   calendarText,
   inPeriod,
@@ -185,10 +182,7 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
     await admin
       .from("conversations")
       .update({
-        takeover_until: takeoverUntilISO(
-          Date.now(),
-          settings?.takeover_minutes ?? DEFAULT_TAKEOVER_MINUTES,
-        ),
+        ...takeoverPatch(Date.now(), settings?.takeover_minutes),
         attention_reason: null,
         last_message_at: now,
       })
@@ -748,13 +742,8 @@ async function generateAgentReply(
         calledTeam = true;
         await admin
           .from("conversations")
-          .update({
-            // A equipe ainda não respondeu: espera mais antes de o agente voltar.
-            takeover_until: takeoverUntilISO(
-              Date.now(),
-              Math.max(CALL_TEAM_MINUTES, clampTakeoverMinutes(settings?.takeover_minutes)),
-            ),
-          })
+          // Mesmo prazo de quando a equipe responde: o agente volta sozinho depois.
+          .update(takeoverPatch(Date.now(), settings?.takeover_minutes))
           .eq("id", conv.id);
         await admin
           .from("conversations")

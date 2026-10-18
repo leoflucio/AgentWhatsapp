@@ -101,7 +101,10 @@ function AgentePage() {
             <Switch checked={s.replyClients} onCheckedChange={(v) => set("replyClients", v)} />
           </label>
           <div className="space-y-2">
-            <Label htmlFor="takeover">Quando a equipe responde pelo celular, o agente espera</Label>
+            <Label htmlFor="takeover">
+              Quando a equipe responde pelo celular ou o agente chama a equipe, ele volta a
+              responder sozinho depois de
+            </Label>
             <select
               id="takeover"
               className="h-9 w-full rounded-md border bg-background px-3 text-sm"

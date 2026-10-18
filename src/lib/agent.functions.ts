@@ -4,7 +4,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { takeoverUntilISO } from "@/lib/whatsapp-agent-rules";
+import { NO_AUTO_RETURN, clampTakeoverMinutes, takeoverUntilISO } from "@/lib/whatsapp-agent-rules";
 
 async function adminAndAccount(userId: string) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -39,7 +39,7 @@ export const getAgentSettings = createServerFn({ method: "POST" })
       healthRules: data?.health_rules === true,
       instructions: (data?.instructions as string | null) ?? "",
       replyClients: data?.reply_clients === true,
-      takeoverMinutes: Number(data?.takeover_minutes ?? 30),
+      takeoverMinutes: clampTakeoverMinutes(data?.takeover_minutes),
       slotMinutes: Number(data?.slot_minutes ?? 60),
       sequentialFill: data?.sequential_fill !== false,
       followupEnabled: data?.followup_enabled === true,
@@ -64,7 +64,7 @@ export const saveAgentSettings = createServerFn({ method: "POST" })
         healthRules: z.boolean(),
         instructions: z.string().max(8000),
         replyClients: z.boolean(),
-        takeoverMinutes: z.number().int().min(5).max(1440),
+        takeoverMinutes: z.number().int().min(0).max(1440),
         slotMinutes: z.number().int().min(15).max(180),
         sequentialFill: z.boolean(),
         followupEnabled: z.boolean(),
@@ -114,7 +114,7 @@ export const saveAgentSettings = createServerFn({ method: "POST" })
         health_rules: data.healthRules,
         instructions: data.instructions.trim() || null,
         reply_clients: data.replyClients,
-        takeover_minutes: data.takeoverMinutes,
+        takeover_minutes: clampTakeoverMinutes(data.takeoverMinutes),
         slot_minutes: data.slotMinutes,
         sequential_fill: data.sequentialFill,
         followup_enabled: data.followupEnabled,
@@ -128,12 +128,14 @@ export const saveAgentSettings = createServerFn({ method: "POST" })
 
     // O novo prazo vale também para as conversas que já estão com a equipe:
     // nenhuma fica presa além de "agora + prazo" (as assumidas pelo botão não mudam).
-    const limit = takeoverUntilISO(Date.now(), data.takeoverMinutes);
-    await admin
-      .from("conversations")
-      .update({ takeover_until: limit })
-      .eq("account_id", account.id)
-      .gt("takeover_until", limit);
+    if (clampTakeoverMinutes(data.takeoverMinutes) !== NO_AUTO_RETURN) {
+      const limit = takeoverUntilISO(Date.now(), data.takeoverMinutes);
+      await admin
+        .from("conversations")
+        .update({ takeover_until: limit })
+        .eq("account_id", account.id)
+        .gt("takeover_until", limit);
+    }
     return { ok: true, testNumbers: numbers.length };
   });
 
