@@ -13,6 +13,7 @@ import { formatMinutes, type DayWindow } from "@/lib/agenda-hours";
 import { getAgentSettings, saveAgentSettings } from "@/lib/agent.functions";
 import { TAKEOVER_OPTIONS, takeoverLabel } from "@/lib/whatsapp-agent-rules";
 import { FOLLOWUP_DAY_OPTIONS, followUpDaysLabel } from "@/lib/followup-rules";
+import { PROMPT_TEMPLATES, countBlanks, findTemplate } from "@/lib/prompt-templates";
 
 export const Route = createFileRoute("/_app/agente")({ component: AgentePage });
 
@@ -37,6 +38,25 @@ function AgentePage() {
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => setS({ ...s, [k]: v });
   const setDay = (day: number, wins: DayWindow[]) =>
     set("schedule", { ...s.schedule, [day]: wins });
+
+  const applyTemplate = (id: string) => {
+    const t = findTemplate(id);
+    if (!t) return;
+    if (
+      s.instructions.trim() &&
+      !window.confirm("Trocar as instruções atuais pelo modelo? O texto de agora será substituído.")
+    )
+      return;
+    setS({
+      ...s,
+      instructions: t.text,
+      segment: s.segment.trim() || t.segment,
+      healthRules: t.health,
+      bookingEnabled: t.booking,
+    });
+    toast.success("Modelo aplicado. Troque cada [PREENCHA: ...] pelos dados do seu negócio.");
+  };
+  const blanks = countBlanks(s.instructions);
 
   const save = async () => {
     setBusy(true);
@@ -202,11 +222,37 @@ function AgentePage() {
               onChange={(e) => set("address", e.target.value)}
             />
           </div>
+          <div className="space-y-2 rounded-md border bg-muted/40 p-3">
+            <Label htmlFor="modelo">Começar por um modelo pronto</Label>
+            <select
+              id="modelo"
+              className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+              value=""
+              onChange={(e) => applyTemplate(e.target.value)}
+            >
+              <option value="">Escolha a sua área de atuação…</option>
+              {PROMPT_TEMPLATES.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">
+              O modelo preenche as instruções abaixo. Depois troque cada [PREENCHA: ...] pelos dados
+              do seu negócio e apague o que não servir. Linhas que ficarem com [PREENCHA: ...] não
+              são lidas pelo agente.
+            </p>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="instrucoes">Instruções para o agente</Label>
+            {blanks > 0 && (
+              <p className="text-sm text-amber-600 dark:text-amber-400">
+                Falta preencher {blanks} {blanks === 1 ? "trecho" : "trechos"} [PREENCHA: ...].
+              </p>
+            )}
             <Textarea
               id="instrucoes"
-              rows={10}
+              rows={16}
               placeholder="O que você vende ou faz, valores, formas de pagamento, entrega, perguntas frequentes, o que o agente nunca deve dizer…"
               value={s.instructions}
               onChange={(e) => set("instructions", e.target.value)}

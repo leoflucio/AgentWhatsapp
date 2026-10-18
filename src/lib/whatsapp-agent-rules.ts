@@ -3,6 +3,7 @@
  * whatsapp-agent-rules.test.ts.
  */
 import { samePhoneBR } from "@/lib/phone";
+import { stripBlanks } from "@/lib/prompt-templates";
 
 /** Parte do evento messages.upsert da Evolution que o agente usa. */
 export type EvoIncoming = {
@@ -215,7 +216,7 @@ export function buildSystemPrompt(args: {
     args.hours ? `HORÁRIO DE ATENDIMENTO: ${args.hours}` : "",
     "",
     "INSTRUÇÕES DO NEGÓCIO (o que vende ou faz, valores, endereço, formas de pagamento, como explicar):",
-    (args.instructions ?? "").trim() || "(o negócio ainda não escreveu instruções)",
+    stripBlanks(args.instructions ?? "") || "(o negócio ainda não escreveu instruções)",
     "",
     "SOBRE ESTE CONTATO:",
     args.contact,
