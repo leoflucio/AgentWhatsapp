@@ -14,6 +14,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as ExcluirContaRouteImport } from './routes/excluir-conta'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as PrivacidadeRouteImport } from './routes/privacidade'
+import { Route as TermosRouteImport } from './routes/termos'
 import { Route as DotwellKnownAssetlinksDotjsonRouteImport } from './routes/[.]well-known/assetlinks[.]json'
 import { Route as AppAdminRouteImport } from './routes/_app/admin'
 import { Route as AppAgendaRouteImport } from './routes/_app/agenda'
@@ -47,6 +48,11 @@ const LoginRoute = LoginRouteImport.update({
 const PrivacidadeRoute = PrivacidadeRouteImport.update({
   id: '/privacidade',
   path: '/privacidade',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermosRoute = TermosRouteImport.update({
+  id: '/termos',
+  path: '/termos',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DotwellKnownAssetlinksDotjsonRoute =
@@ -107,6 +113,7 @@ export interface FileRoutesByFullPath {
   '/excluir-conta': typeof ExcluirContaRoute
   '/login': typeof LoginRoute
   '/privacidade': typeof PrivacidadeRoute
+  '/termos': typeof TermosRoute
   '/.well-known/assetlinks.json': typeof DotwellKnownAssetlinksDotjsonRoute
   '/admin': typeof AppAdminRoute
   '/agenda': typeof AppAgendaRoute
@@ -123,6 +130,7 @@ export interface FileRoutesByTo {
   '/excluir-conta': typeof ExcluirContaRoute
   '/login': typeof LoginRoute
   '/privacidade': typeof PrivacidadeRoute
+  '/termos': typeof TermosRoute
   '/.well-known/assetlinks.json': typeof DotwellKnownAssetlinksDotjsonRoute
   '/admin': typeof AppAdminRoute
   '/agenda': typeof AppAgendaRoute
@@ -141,6 +149,7 @@ export interface FileRoutesById {
   '/excluir-conta': typeof ExcluirContaRoute
   '/login': typeof LoginRoute
   '/privacidade': typeof PrivacidadeRoute
+  '/termos': typeof TermosRoute
   '/.well-known/assetlinks.json': typeof DotwellKnownAssetlinksDotjsonRoute
   '/_app/admin': typeof AppAdminRoute
   '/_app/agenda': typeof AppAgendaRoute
@@ -159,6 +168,7 @@ export interface FileRouteTypes {
     | '/excluir-conta'
     | '/login'
     | '/privacidade'
+    | '/termos'
     | '/.well-known/assetlinks.json'
     | '/admin'
     | '/agenda'
@@ -175,6 +185,7 @@ export interface FileRouteTypes {
     | '/excluir-conta'
     | '/login'
     | '/privacidade'
+    | '/termos'
     | '/.well-known/assetlinks.json'
     | '/admin'
     | '/agenda'
@@ -192,6 +203,7 @@ export interface FileRouteTypes {
     | '/excluir-conta'
     | '/login'
     | '/privacidade'
+    | '/termos'
     | '/.well-known/assetlinks.json'
     | '/_app/admin'
     | '/_app/agenda'
@@ -210,6 +222,7 @@ export interface RootRouteChildren {
   ExcluirContaRoute: typeof ExcluirContaRoute
   LoginRoute: typeof LoginRoute
   PrivacidadeRoute: typeof PrivacidadeRoute
+  TermosRoute: typeof TermosRoute
   DotwellKnownAssetlinksDotjsonRoute: typeof DotwellKnownAssetlinksDotjsonRoute
   ApiPublicAsaasWebhookRoute: typeof ApiPublicAsaasWebhookRoute
   ApiPublicWhatsappWebhookRoute: typeof ApiPublicWhatsappWebhookRoute
@@ -250,6 +263,13 @@ declare module '@tanstack/react-router' {
       path: '/privacidade'
       fullPath: '/privacidade'
       preLoaderRoute: typeof PrivacidadeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/termos': {
+      id: '/termos'
+      path: '/termos'
+      fullPath: '/termos'
+      preLoaderRoute: typeof TermosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/.well-known/assetlinks.json': {
@@ -353,6 +373,7 @@ const rootRouteChildren: RootRouteChildren = {
   ExcluirContaRoute: ExcluirContaRoute,
   LoginRoute: LoginRoute,
   PrivacidadeRoute: PrivacidadeRoute,
+  TermosRoute: TermosRoute,
   DotwellKnownAssetlinksDotjsonRoute: DotwellKnownAssetlinksDotjsonRoute,
   ApiPublicAsaasWebhookRoute: ApiPublicAsaasWebhookRoute,
   ApiPublicWhatsappWebhookRoute: ApiPublicWhatsappWebhookRoute,

@@ -169,6 +169,10 @@ function LoginPage() {
               Privacidade
             </Link>
             {" · "}
+            <Link to="/termos" className="underline">
+              Termos
+            </Link>
+            {" · "}
             <Link to="/excluir-conta" className="underline">
               Excluir conta
             </Link>
