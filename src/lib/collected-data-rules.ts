@@ -1,5 +1,9 @@
 // Dados colhidos pelo agente (planilha por conta): campos que o negócio escolhe
-// (nome, CPF, valor...) e o que o agente anotou de cada contato. Regras puras, sem banco.
+// (nome, CPF, valor...) e o que o agente anotou, uma linha por registro (cliente,
+// pedido ou cotação; o mesmo telefone pode ter várias). Regras puras, sem banco.
+
+/** Parâmetro de salvar_dados que abre uma linha nova (não pode ser chave de campo). */
+export const NEW_RECORD_PARAM = "novo_registro";
 
 export type DataField = {
   /** Chave fixa (letras minúsculas, números e _), não muda quando o nome do campo muda. */
@@ -46,6 +50,7 @@ export function normalizeFields(raw: unknown): DataField[] {
       .slice(0, MAX_LABEL);
     if (!label || labels.has(label.toLowerCase())) continue;
     const given = typeof r.key === "string" && /^[a-z][a-z0-9_]{0,39}$/.test(r.key) ? r.key : "";
+    keys.add(NEW_RECORD_PARAM);
     const key = given && !keys.has(given) ? given : slugKey(label, keys);
     keys.add(key);
     labels.add(label.toLowerCase());
@@ -89,26 +94,35 @@ export function mergeValues(
   return { data, changed };
 }
 
-/** Bloco do prompt: o que pedir, o que só anotar e o que já está anotado deste contato. */
+/**
+ * Bloco do prompt: o que pedir, o que só anotar e o registro atual (última linha
+ * deste telefone). Dados de outro cliente ou pedido vão numa linha nova.
+ */
 export function collectPromptText(fields: DataField[], current: DataValues): string {
   if (fields.length === 0) return "";
   const have = fields.filter((f) => current[f.key]);
   const missingAsk = fields.filter((f) => f.ask && !current[f.key]);
-  const missingNote = fields.filter((f) => !f.ask && !current[f.key]);
+  const noteOnly = fields.filter((f) => !f.ask);
   return [
     "DADOS PARA ANOTAR (planilha do negócio):",
-    missingAsk.length ? `Pedir: ${missingAsk.map((f) => f.label).join(", ")}.` : "",
-    missingNote.length
-      ? `Só anotar se a pessoa disser (não pergunte): ${missingNote.map((f) => f.label).join(", ")}.`
+    `Campos: ${fields.map((f) => f.label).join(", ")}.`,
+    missingAsk.length
+      ? `Pedir, se ainda não souber: ${missingAsk.map((f) => f.label).join(", ")}.`
+      : "",
+    noteOnly.length
+      ? `Não pergunte por conta própria (só anote se a pessoa disser ou se as instruções do negócio mandarem pedir): ${noteOnly.map((f) => f.label).join(", ")}.`
       : "",
     have.length
-      ? `Já anotados (não peça de novo): ${have.map((f) => `${f.label} = ${current[f.key]}`).join("; ")}.`
-      : "",
+      ? `Registro atual deste contato: ${have.map((f) => `${f.label} = ${current[f.key]}`).join("; ")}.`
+      : "Este contato ainda não tem registro.",
     "Sempre que a pessoa informar um desses dados, chame salvar_dados na mesma resposta, com o valor exatamente como ela disse. Se ela corrigir um dado, salve o novo valor.",
+    have.length
+      ? `Se os dados forem de OUTRO cliente, pedido ou cotação (não do registro atual), chame salvar_dados com ${NEW_RECORD_PARAM} = true para abrir uma linha nova; nunca sobrescreva o registro atual com dados de outra pessoa. Para o mesmo cliente ou pedido, não peça de novo o que já está no registro.`
+      : "",
     missingAsk.length
       ? "Peça os dados que faltam com naturalidade, no máximo dois por mensagem, depois de entender o que a pessoa quer (não na saudação). Se ela não quiser informar, não insista."
       : "",
-    "Nunca invente dados nem peça dados fora desta lista.",
+    "Nunca invente dados.",
   ]
     .filter(Boolean)
     .join(" ");

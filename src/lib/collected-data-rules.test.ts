@@ -38,6 +38,9 @@ describe("normalizeFields", () => {
     const many = Array.from({ length: 30 }, (_, i) => ({ label: `Campo ${i}` }));
     expect(normalizeFields(many)).toHaveLength(MAX_FIELDS);
   });
+  it("campo não usa a chave de novo registro", () => {
+    expect(normalizeFields([{ label: "Novo registro" }])[0]!.key).toBe("novo_registro_2");
+  });
   it("chave repetida vira outra", () => {
     const f = normalizeFields([
       { key: "x", label: "A" },
@@ -77,14 +80,14 @@ describe("collectPromptText", () => {
   });
   it("separa pedir, só anotar e já anotados", () => {
     const t = collectPromptText(fields, { nome: "Ana" });
-    expect(t).toContain("Pedir: CPF.");
-    expect(t).toContain("não pergunte): Valor.");
-    expect(t).toContain("Nome = Ana");
-    expect(t).toContain("salvar_dados");
+    expect(t).toContain("Pedir, se ainda não souber: CPF.");
+    expect(t).toContain("mandarem pedir): Valor.");
+    expect(t).toContain("Registro atual deste contato: Nome = Ana");
+    expect(t).toContain("novo_registro = true");
   });
   it("tudo anotado: não manda pedir", () => {
     const t = collectPromptText(fields, { nome: "Ana", cpf: "1", valor: "2" });
-    expect(t).not.toContain("Pedir:");
+    expect(t).not.toContain("Pedir,");
     expect(t).not.toContain("Peça os dados");
   });
 });

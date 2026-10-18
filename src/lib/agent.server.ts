@@ -14,6 +14,7 @@ import { z } from "zod";
 import { phoneMatchKey, samePhoneBR } from "@/lib/phone";
 import { scheduleText } from "@/lib/agenda-hours";
 import {
+  NEW_RECORD_PARAM,
   collectPromptText,
   mergeValues,
   normalizeFields,
@@ -499,7 +500,7 @@ async function generateAgentReply(
     .filter(Boolean)
     .join(" ");
 
-  // Dados que o negócio quer anotar (tela Dados) e o que já foi anotado deste contato.
+  // Dados que o negócio quer anotar (tela Dados) e o registro atual (última linha deste telefone).
   const dataFields = normalizeFields(settings?.data_fields);
   const dataKey = phoneMatchKey(phone);
   let collected: { id: string | null; data: Record<string, string> } = { id: null, data: {} };
@@ -509,6 +510,8 @@ async function generateAgentReply(
       .select("id, data")
       .eq("account_id", accountId)
       .eq("phone_key", dataKey)
+      .order("updated_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
     if (row) collected = { id: row.id as string, data: parseValues(row.data) };
   }
@@ -755,16 +758,22 @@ async function generateAgentReply(
       },
     }),
     salvar_dados: tool({
-      description:
-        "Anota na planilha do negócio os dados que esta pessoa informou (os campos de DADOS PARA ANOTAR). Passe só os campos que ela disse agora.",
-      inputSchema: z.object(
-        Object.fromEntries(
+      description: `Anota na planilha do negócio os dados que a pessoa informou (os campos de DADOS PARA ANOTAR). Passe só os campos informados agora. Use ${NEW_RECORD_PARAM} = true quando os dados forem de outro cliente, pedido ou cotação (abre uma linha nova).`,
+      inputSchema: z.object({
+        ...(Object.fromEntries(
           dataFields.map((f) => [f.key, z.string().optional().describe(f.label)]),
-        ) as Record<string, z.ZodOptional<z.ZodString>>,
-      ),
+        ) as Record<string, z.ZodOptional<z.ZodString>>),
+        [NEW_RECORD_PARAM]: z
+          .boolean()
+          .optional()
+          .describe("true = dados de outro cliente/pedido: abre uma linha nova na planilha"),
+      }),
       execute: async (input) => {
         if (!dataKey) return "Não foi possível anotar (telefone inválido).";
-        const merged = mergeValues(collected.data, input as Record<string, unknown>, dataFields);
+        const fresh =
+          Boolean((input as Record<string, unknown>)[NEW_RECORD_PARAM]) || !collected.id;
+        const base = fresh ? {} : collected.data;
+        const merged = mergeValues(base, input as Record<string, unknown>, dataFields);
         if (merged.changed.length === 0) return "Nada novo para anotar.";
         const row = {
           account_id: accountId,
@@ -776,18 +785,22 @@ async function generateAgentReply(
           updated_by: "agente",
           updated_at: new Date().toISOString(),
         };
-        const { data: saved, error } = await admin
-          .from("collected_data")
-          .upsert(row, { onConflict: "account_id,phone_key" })
-          .select("id")
-          .single();
-        if (error) {
-          console.error("[agente] salvar_dados", error.message);
+        const { data: saved, error } = fresh
+          ? await admin.from("collected_data").insert(row).select("id").single()
+          : await admin
+              .from("collected_data")
+              .update(row)
+              .eq("id", collected.id)
+              .eq("account_id", accountId)
+              .select("id")
+              .single();
+        if (error || !saved) {
+          console.error("[agente] salvar_dados", error?.message);
           return "Não foi possível anotar agora. Continue a conversa normalmente.";
         }
-        collected = { id: (saved?.id as string) ?? collected.id, data: merged.data };
+        collected = { id: saved.id as string, data: merged.data };
         const missing = dataFields.filter((f) => f.ask && !merged.data[f.key]).map((f) => f.label);
-        return `Anotado. ${missing.length ? `Ainda falta: ${missing.join(", ")}.` : "Todos os dados pedidos já foram anotados."} Não leia os dados de volta para a pessoa, a não ser que ela peça.`;
+        return `Anotado${fresh ? " (linha nova)" : ""}. ${missing.length ? `Ainda falta: ${missing.join(", ")}.` : ""} Não leia os dados de volta para a pessoa, a não ser que ela peça ou as instruções mandem enviar um resumo.`;
       },
     }),
     chamar_atendente: tool({

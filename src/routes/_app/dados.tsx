@@ -151,8 +151,10 @@ function DadosPage() {
         <CardContent className="space-y-3 text-sm">
           <p className="text-muted-foreground">
             Escolha o que o agente deve anotar de cada pessoa. "Pedir" = o agente pergunta com
-            naturalidade durante a conversa; desligado = só anota se a pessoa disser. Tudo cai na
-            planilha abaixo, uma linha por telefone, e você pode editar.
+            naturalidade durante a conversa; desligado = só anota se a pessoa disser. Para pedir só
+            em certos casos (ex.: só numa cotação), deixe desligado e escreva nas instruções do
+            agente quando pedir. Tudo cai na planilha abaixo, uma linha por cliente ou pedido, e
+            você pode editar.
           </p>
           {!fieldDraft && (
             <div className="flex flex-wrap gap-2">

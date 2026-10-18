@@ -125,10 +125,7 @@ export const saveDataRow = createServerFn({ method: "POST" })
           .eq("id", data.id)
           .eq("account_id", account.id)
       : await admin.from("collected_data").insert(row);
-    if (error) {
-      if (error.code === "23505") throw new Error("Já existe uma linha com esse telefone.");
-      throw new Error(error.message);
-    }
+    if (error) throw new Error(error.message);
     return { ok: true };
   });
 
