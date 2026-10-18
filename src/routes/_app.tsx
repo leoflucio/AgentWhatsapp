@@ -8,6 +8,7 @@ import {
   MessagesSquare,
   QrCode,
   Shield,
+  Table2,
   Users,
 } from "lucide-react";
 import { CompleteProfile } from "@/components/CompleteProfile";
@@ -22,6 +23,7 @@ const NAV = [
   { to: "/conversas", label: "Conversas", short: "Conversas", icon: MessagesSquare },
   { to: "/agenda", label: "Agenda", short: "Agenda", icon: CalendarDays },
   { to: "/contatos", label: "Contatos", short: "Contatos", icon: Users },
+  { to: "/dados", label: "Dados", short: "Dados", icon: Table2 },
   { to: "/agente", label: "Agente", short: "Agente", icon: Bot },
   { to: "/conexao", label: "WhatsApp", short: "WhatsApp", icon: QrCode },
   { to: "/planos", label: "Planos", short: "Planos", icon: CreditCard },

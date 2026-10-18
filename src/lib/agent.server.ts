@@ -14,6 +14,12 @@ import { z } from "zod";
 import { phoneMatchKey, samePhoneBR } from "@/lib/phone";
 import { scheduleText } from "@/lib/agenda-hours";
 import {
+  collectPromptText,
+  mergeValues,
+  normalizeFields,
+  parseValues,
+} from "@/lib/collected-data-rules";
+import {
   formatLocal,
   localDateTimeOf,
   localDateTimeToUTC,
@@ -493,6 +499,20 @@ async function generateAgentReply(
     .filter(Boolean)
     .join(" ");
 
+  // Dados que o negócio quer anotar (tela Dados) e o que já foi anotado deste contato.
+  const dataFields = normalizeFields(settings?.data_fields);
+  const dataKey = phoneMatchKey(phone);
+  let collected: { id: string | null; data: Record<string, string> } = { id: null, data: {} };
+  if (dataFields.length && dataKey) {
+    const { data: row } = await admin
+      .from("collected_data")
+      .select("id, data")
+      .eq("account_id", accountId)
+      .eq("phone_key", dataKey)
+      .maybeSingle();
+    if (row) collected = { id: row.id as string, data: parseValues(row.data) };
+  }
+
   const instructions = [
     ctx.account.address ? `Endereço: ${ctx.account.address}.` : "",
     (settings?.instructions ?? "").trim(),
@@ -510,6 +530,7 @@ async function generateAgentReply(
     today: today.split("-").reverse().join("/"),
     calendar: calendarText(today, 14),
     contact,
+    collect: collectPromptText(dataFields, collected.data),
     sequentialFill: sequential,
   });
 
@@ -733,6 +754,42 @@ async function generateAgentReply(
         return `Reserva de ${formatLocal(old.starts_at)} desmarcada e horário liberado.`;
       },
     }),
+    salvar_dados: tool({
+      description:
+        "Anota na planilha do negócio os dados que esta pessoa informou (os campos de DADOS PARA ANOTAR). Passe só os campos que ela disse agora.",
+      inputSchema: z.object(
+        Object.fromEntries(
+          dataFields.map((f) => [f.key, z.string().optional().describe(f.label)]),
+        ) as Record<string, z.ZodOptional<z.ZodString>>,
+      ),
+      execute: async (input) => {
+        if (!dataKey) return "Não foi possível anotar (telefone inválido).";
+        const merged = mergeValues(collected.data, input as Record<string, unknown>, dataFields);
+        if (merged.changed.length === 0) return "Nada novo para anotar.";
+        const row = {
+          account_id: accountId,
+          conversation_id: conv.id,
+          contact_name: knownName || null,
+          phone,
+          phone_key: dataKey,
+          data: merged.data,
+          updated_by: "agente",
+          updated_at: new Date().toISOString(),
+        };
+        const { data: saved, error } = await admin
+          .from("collected_data")
+          .upsert(row, { onConflict: "account_id,phone_key" })
+          .select("id")
+          .single();
+        if (error) {
+          console.error("[agente] salvar_dados", error.message);
+          return "Não foi possível anotar agora. Continue a conversa normalmente.";
+        }
+        collected = { id: (saved?.id as string) ?? collected.id, data: merged.data };
+        const missing = dataFields.filter((f) => f.ask && !merged.data[f.key]).map((f) => f.label);
+        return `Anotado. ${missing.length ? `Ainda falta: ${missing.join(", ")}.` : "Todos os dados pedidos já foram anotados."} Não leia os dados de volta para a pessoa, a não ser que ela peça.`;
+      },
+    }),
     chamar_atendente: tool({
       description:
         "Passa a conversa para a equipe (urgência, reclamação, pedido de falar com pessoa, dúvida sem resposta).",
@@ -754,8 +811,10 @@ async function generateAgentReply(
     }),
   };
 
-  // Sem agenda, a IA só pode chamar a equipe.
-  const activeTools = booking ? undefined : (["chamar_atendente"] as Array<keyof typeof tools>);
+  // Sem agenda, a IA só chama a equipe (e anota dados, se o negócio pediu).
+  const activeTools = (Object.keys(tools) as Array<keyof typeof tools>).filter((k) =>
+    k === "salvar_dados" ? dataFields.length > 0 : booking || k === "chamar_atendente",
+  );
   const run = (msgs: typeof messages, extraSystem = "") =>
     generateText({
       model,
@@ -800,6 +859,7 @@ async function generateAgentReply(
       system: `${system}\n\nConsulte a agenda agora com horarios_livres (ou conferir_horario, se a pessoa pediu dia e hora) e ofereça SOMENTE os horários devolvidos. Os horários que estavam na sua resposta anterior não foram conferidos e podem estar ocupados.`,
       messages,
       tools,
+      activeTools,
       prepareStep: ({ stepNumber }) =>
         stepNumber === 0 ? { toolChoice: "required" as const } : {},
       stopWhen: stepCountIs(8),

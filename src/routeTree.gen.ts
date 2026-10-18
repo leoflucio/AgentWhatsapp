@@ -22,6 +22,7 @@ import { Route as AppAgenteRouteImport } from './routes/_app/agente'
 import { Route as AppConexaoRouteImport } from './routes/_app/conexao'
 import { Route as AppContatosRouteImport } from './routes/_app/contatos'
 import { Route as AppConversasRouteImport } from './routes/_app/conversas'
+import { Route as AppDadosRouteImport } from './routes/_app/dados'
 import { Route as AppPlanosRouteImport } from './routes/_app/planos'
 import { Route as ApiPublicAsaasWebhookRouteImport } from './routes/api/public/asaas/webhook'
 import { Route as ApiPublicWhatsappWebhookRouteImport } from './routes/api/public/whatsapp/webhook'
@@ -91,6 +92,11 @@ const AppConversasRoute = AppConversasRouteImport.update({
   path: '/conversas',
   getParentRoute: () => AppRoute,
 } as any)
+const AppDadosRoute = AppDadosRouteImport.update({
+  id: '/dados',
+  path: '/dados',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppPlanosRoute = AppPlanosRouteImport.update({
   id: '/planos',
   path: '/planos',
@@ -121,6 +127,7 @@ export interface FileRoutesByFullPath {
   '/conexao': typeof AppConexaoRoute
   '/contatos': typeof AppContatosRoute
   '/conversas': typeof AppConversasRoute
+  '/dados': typeof AppDadosRoute
   '/planos': typeof AppPlanosRoute
   '/api/public/asaas/webhook': typeof ApiPublicAsaasWebhookRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRoute
@@ -138,6 +145,7 @@ export interface FileRoutesByTo {
   '/conexao': typeof AppConexaoRoute
   '/contatos': typeof AppContatosRoute
   '/conversas': typeof AppConversasRoute
+  '/dados': typeof AppDadosRoute
   '/planos': typeof AppPlanosRoute
   '/api/public/asaas/webhook': typeof ApiPublicAsaasWebhookRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRoute
@@ -157,6 +165,7 @@ export interface FileRoutesById {
   '/_app/conexao': typeof AppConexaoRoute
   '/_app/contatos': typeof AppContatosRoute
   '/_app/conversas': typeof AppConversasRoute
+  '/_app/dados': typeof AppDadosRoute
   '/_app/planos': typeof AppPlanosRoute
   '/api/public/asaas/webhook': typeof ApiPublicAsaasWebhookRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRoute
@@ -176,6 +185,7 @@ export interface FileRouteTypes {
     | '/conexao'
     | '/contatos'
     | '/conversas'
+    | '/dados'
     | '/planos'
     | '/api/public/asaas/webhook'
     | '/api/public/whatsapp/webhook'
@@ -193,6 +203,7 @@ export interface FileRouteTypes {
     | '/conexao'
     | '/contatos'
     | '/conversas'
+    | '/dados'
     | '/planos'
     | '/api/public/asaas/webhook'
     | '/api/public/whatsapp/webhook'
@@ -211,6 +222,7 @@ export interface FileRouteTypes {
     | '/_app/conexao'
     | '/_app/contatos'
     | '/_app/conversas'
+    | '/_app/dados'
     | '/_app/planos'
     | '/api/public/asaas/webhook'
     | '/api/public/whatsapp/webhook'
@@ -321,6 +333,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppConversasRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/dados': {
+      id: '/_app/dados'
+      path: '/dados'
+      fullPath: '/dados'
+      preLoaderRoute: typeof AppDadosRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/planos': {
       id: '/_app/planos'
       path: '/planos'
@@ -352,6 +371,7 @@ interface AppRouteChildren {
   AppConexaoRoute: typeof AppConexaoRoute
   AppContatosRoute: typeof AppContatosRoute
   AppConversasRoute: typeof AppConversasRoute
+  AppDadosRoute: typeof AppDadosRoute
   AppPlanosRoute: typeof AppPlanosRoute
 }
 
@@ -362,6 +382,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppConexaoRoute: AppConexaoRoute,
   AppContatosRoute: AppContatosRoute,
   AppConversasRoute: AppConversasRoute,
+  AppDadosRoute: AppDadosRoute,
   AppPlanosRoute: AppPlanosRoute,
 }
 

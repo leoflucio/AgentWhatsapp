@@ -183,6 +183,8 @@ export function buildSystemPrompt(args: {
   /** Próximos dias com dia da semana e data (calendarText). */
   calendar?: string | null;
   contact: string;
+  /** Dados que o negócio quer anotar deste contato (collectPromptText). */
+  collect?: string | null;
   /** O agente pode consultar a agenda e reservar horários (padrão: sim). */
   booking?: boolean;
   /** Regras extras da área da saúde. */
@@ -217,6 +219,7 @@ export function buildSystemPrompt(args: {
     "",
     "SOBRE ESTE CONTATO:",
     args.contact,
+    ...(args.collect ? ["", args.collect] : []),
   ]
     .filter((l) => l !== undefined)
     .join("\n");
