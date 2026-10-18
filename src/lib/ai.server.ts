@@ -15,7 +15,11 @@ export function aiModel(kind: "main" | "lite" = "main") {
   const key = (process.env.AI_API_KEY ?? "").trim();
   if (!key) return null;
   const provider = createOpenAICompatible({
-    name: "ai",
+    // Tem que ser "google": o provedor guarda a thought_signature do Gemini 3 sob
+    // este nome, mas só a devolve na rodada seguinte se estiver sob "google".
+    // Com outro nome, toda resposta que usa ferramenta (salvar dados, chamar a
+    // equipe, agenda) falhava no segundo passo e o agente ficava mudo.
+    name: "google",
     baseURL: (process.env.AI_BASE_URL ?? "").trim() || GEMINI_OPENAI_URL,
     apiKey: key,
   });
