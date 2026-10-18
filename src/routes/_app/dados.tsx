@@ -14,6 +14,7 @@ import {
   getDataSheet,
   saveDataFields,
   saveDataRow,
+  suggestDataFields,
   type DataRow,
 } from "@/lib/collected-data.functions";
 import { formatWhatsApp } from "@/lib/phone";
@@ -64,6 +65,25 @@ function DadosPage() {
         Object.values(r.data).some((v) => v.toLowerCase().includes(s)),
     );
   }, [q.data, search]);
+
+  const suggest = async () => {
+    setBusy(true);
+    try {
+      const r = await suggestDataFields();
+      const before = (fieldDraft ?? fields).filter((f) => f.label.trim()).length;
+      setFieldDraft(r.fields.map((f) => ({ ...f })));
+      const added = r.fields.length - before;
+      toast.success(
+        added > 0
+          ? `${added} campo(s) sugerido(s) pelo prompt. Confira e clique em Salvar campos.`
+          : "O prompt não pede nenhum dado novo além dos campos atuais.",
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível ler o prompt.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const saveFields = async () => {
     if (!fieldDraft) return;
@@ -138,15 +158,20 @@ function DadosPage() {
       <Card>
         <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0">
           <CardTitle>Dados que o agente colhe</CardTitle>
-          {!fieldDraft && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setFieldDraft(fields.map((f) => ({ ...f })))}
-            >
-              Editar campos
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => void suggest()}>
+              {busy ? "Lendo o prompt…" : "Criar campos pelo prompt"}
             </Button>
-          )}
+            {!fieldDraft && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setFieldDraft(fields.map((f) => ({ ...f })))}
+              >
+                Editar campos
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <p className="text-muted-foreground">

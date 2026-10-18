@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_FIELDS,
+  mergeSuggestedFields,
   collectPromptText,
   mergeValues,
   normalizeFields,
@@ -105,5 +106,26 @@ describe("valuesCsv", () => {
     ]);
     expect(csv.startsWith("\uFEFFNome no WhatsApp;Telefone;Obs;Atualizado em\r\n")).toBe(true);
     expect(csv).toContain('Ana;5511999999999;"diz ""oi""; tchau";18/10/2026');
+  });
+});
+
+describe("mergeSuggestedFields", () => {
+  it("limpa a lista da IA, mantém os campos atuais e não repete", () => {
+    const existing = normalizeFields([{ key: "cpf", label: "CPF", ask: true }]);
+    const out = mergeSuggestedFields(
+      existing,
+      "1. Tipo\n- **Nome do cliente**\ncpf\n\nCapital segurado:\nisto aqui é uma frase longa demais para ser um campo da planilha\nObservações",
+    );
+    expect(out).toEqual([
+      { key: "cpf", label: "CPF", ask: true },
+      { key: "tipo", label: "Tipo", ask: false },
+      { key: "nome_do_cliente", label: "Nome do cliente", ask: false },
+      { key: "capital_segurado", label: "Capital segurado", ask: false },
+      { key: "observacoes", label: "Observações", ask: false },
+    ]);
+  });
+  it("respeita o máximo", () => {
+    const many = Array.from({ length: 30 }, (_, i) => `Campo ${i}`).join("\n");
+    expect(mergeSuggestedFields([], many)).toHaveLength(MAX_FIELDS);
   });
 });

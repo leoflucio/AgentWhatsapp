@@ -142,3 +142,33 @@ export const deleteDataRow = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+/** Lê as instruções do agente com IA e sugere os campos (a pessoa revisa e salva). */
+export const suggestDataFields = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { admin, account } = await adminAndAccount(context.userId);
+    const { mergeSuggestedFields, normalizeFields, SUGGEST_FIELDS_SYSTEM } =
+      await import("@/lib/collected-data-rules");
+    const { data: settings } = await admin
+      .from("agent_settings")
+      .select("instructions, data_fields")
+      .eq("account_id", account.id)
+      .maybeSingle();
+    const instructions = String(settings?.instructions ?? "").trim();
+    if (instructions.length < 20) {
+      throw new Error("Escreva as instruções do agente (tela Agente) antes de criar os campos.");
+    }
+    const { aiModel } = await import("@/lib/ai.server");
+    const model = aiModel("lite");
+    if (!model) throw new Error("IA não configurada no servidor.");
+    const { generateText } = await import("ai");
+    const r = await generateText({
+      model,
+      system: SUGGEST_FIELDS_SYSTEM,
+      prompt: `<instrucoes>\n${instructions.slice(0, 8000)}\n</instrucoes>`,
+      temperature: 0,
+      maxRetries: 1,
+    });
+    return { fields: mergeSuggestedFields(normalizeFields(settings?.data_fields), r.text) };
+  });
