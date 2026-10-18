@@ -8,7 +8,7 @@
  * horários livres e RESERVA (não marca): a reserva aparece na agenda para a
  * equipe confirmar.
  */
-import { generateText, stepCountIs, tool } from "ai";
+import { generateText, stepCountIs, tool, type ToolSet } from "ai";
 import { aiModel } from "@/lib/ai.server";
 import { z } from "zod";
 import { phoneMatchKey, samePhoneBR } from "@/lib/phone";
@@ -17,8 +17,11 @@ import {
   NEW_RECORD_PARAM,
   collectPromptText,
   mergeValues,
-  normalizeFields,
+  normalizeSheets,
   parseValues,
+  sheetToolName,
+  type DataSheet,
+  type DataValues,
 } from "@/lib/collected-data-rules";
 import {
   formatLocal,
@@ -500,20 +503,24 @@ async function generateAgentReply(
     .filter(Boolean)
     .join(" ");
 
-  // Dados que o negócio quer anotar (tela Dados) e o registro atual (última linha deste telefone).
-  const dataFields = normalizeFields(settings?.data_fields);
+  // Planilhas que o negócio quer preencher (tela Dados) e o registro atual de
+  // cada uma (última linha deste telefone nela).
+  const dataSheets = normalizeSheets(settings?.data_sheets, settings?.data_fields).filter(
+    (sh) => sh.fields.length > 0,
+  );
   const dataKey = phoneMatchKey(phone);
-  let collected: { id: string | null; data: Record<string, string> } = { id: null, data: {} };
-  if (dataFields.length && dataKey) {
-    const { data: row } = await admin
+  const collected: Record<string, { id: string; data: DataValues }> = {};
+  if (dataSheets.length && dataKey) {
+    const { data: rows } = await admin
       .from("collected_data")
-      .select("id, data")
+      .select("id, sheet_key, data")
       .eq("account_id", accountId)
       .eq("phone_key", dataKey)
       .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (row) collected = { id: row.id as string, data: parseValues(row.data) };
+      .limit(50);
+    for (const r of (rows ?? []) as any[]) {
+      if (!collected[r.sheet_key]) collected[r.sheet_key] = { id: r.id, data: parseValues(r.data) };
+    }
   }
 
   const instructions = [
@@ -533,7 +540,10 @@ async function generateAgentReply(
     today: today.split("-").reverse().join("/"),
     calendar: calendarText(today, 14),
     contact,
-    collect: collectPromptText(dataFields, collected.data),
+    collect: collectPromptText(
+      dataSheets,
+      Object.fromEntries(Object.entries(collected).map(([k, v]) => [k, v.data])),
+    ),
     sequentialFill: sequential,
   });
 
@@ -757,52 +767,6 @@ async function generateAgentReply(
         return `Reserva de ${formatLocal(old.starts_at)} desmarcada e horário liberado.`;
       },
     }),
-    salvar_dados: tool({
-      description: `Anota na planilha do negócio os dados que a pessoa informou (os campos de DADOS PARA ANOTAR). Passe só os campos informados agora. Use ${NEW_RECORD_PARAM} = true quando os dados forem de outro cliente, pedido ou cotação (abre uma linha nova).`,
-      inputSchema: z.object({
-        ...(Object.fromEntries(
-          dataFields.map((f) => [f.key, z.string().optional().describe(f.label)]),
-        ) as Record<string, z.ZodOptional<z.ZodString>>),
-        [NEW_RECORD_PARAM]: z
-          .boolean()
-          .optional()
-          .describe("true = dados de outro cliente/pedido: abre uma linha nova na planilha"),
-      }),
-      execute: async (input) => {
-        if (!dataKey) return "Não foi possível anotar (telefone inválido).";
-        const fresh =
-          Boolean((input as Record<string, unknown>)[NEW_RECORD_PARAM]) || !collected.id;
-        const base = fresh ? {} : collected.data;
-        const merged = mergeValues(base, input as Record<string, unknown>, dataFields);
-        if (merged.changed.length === 0) return "Nada novo para anotar.";
-        const row = {
-          account_id: accountId,
-          conversation_id: conv.id,
-          contact_name: knownName || null,
-          phone,
-          phone_key: dataKey,
-          data: merged.data,
-          updated_by: "agente",
-          updated_at: new Date().toISOString(),
-        };
-        const { data: saved, error } = fresh
-          ? await admin.from("collected_data").insert(row).select("id").single()
-          : await admin
-              .from("collected_data")
-              .update(row)
-              .eq("id", collected.id)
-              .eq("account_id", accountId)
-              .select("id")
-              .single();
-        if (error || !saved) {
-          console.error("[agente] salvar_dados", error?.message);
-          return "Não foi possível anotar agora. Continue a conversa normalmente.";
-        }
-        collected = { id: saved.id as string, data: merged.data };
-        const missing = dataFields.filter((f) => f.ask && !merged.data[f.key]).map((f) => f.label);
-        return `Anotado${fresh ? " (linha nova)" : ""}. ${missing.length ? `Ainda falta: ${missing.join(", ")}.` : ""} Não leia os dados de volta para a pessoa, a não ser que ela peça ou as instruções mandem enviar um resumo.`;
-      },
-    }),
     chamar_atendente: tool({
       description:
         "Passa a conversa para a equipe (urgência, reclamação, pedido de falar com pessoa, dúvida sem resposta).",
@@ -824,16 +788,71 @@ async function generateAgentReply(
     }),
   };
 
-  // Sem agenda, a IA só chama a equipe (e anota dados, se o negócio pediu).
-  const activeTools = (Object.keys(tools) as Array<keyof typeof tools>).filter((k) =>
-    k === "salvar_dados" ? dataFields.length > 0 : booking || k === "chamar_atendente",
+  /** Uma ferramenta por planilha (salvar_<planilha>), só com os campos dela. */
+  const sheetTool = (sheet: DataSheet) =>
+    tool({
+      description: `Anota na planilha "${sheet.name}" os dados que a pessoa informou. Passe só os campos informados agora. Use ${NEW_RECORD_PARAM} = true quando os dados forem de outro cliente, pedido ou cotação (abre uma linha nova nesta planilha).`,
+      inputSchema: z.object({
+        ...(Object.fromEntries(
+          sheet.fields.map((f) => [f.key, z.string().optional().describe(f.label)]),
+        ) as Record<string, z.ZodOptional<z.ZodString>>),
+        [NEW_RECORD_PARAM]: z
+          .boolean()
+          .optional()
+          .describe("true = dados de outro cliente/pedido: abre uma linha nova na planilha"),
+      }),
+      execute: async (input) => {
+        if (!dataKey) return "Não foi possível anotar (telefone inválido).";
+        const values = input as Record<string, unknown>;
+        const current = collected[sheet.key];
+        const fresh = Boolean(values[NEW_RECORD_PARAM]) || !current;
+        const merged = mergeValues(fresh ? {} : current.data, values, sheet.fields);
+        if (merged.changed.length === 0) return "Nada novo para anotar.";
+        const row = {
+          account_id: accountId,
+          sheet_key: sheet.key,
+          conversation_id: conv.id,
+          contact_name: knownName || null,
+          phone,
+          phone_key: dataKey,
+          data: merged.data,
+          updated_by: "agente",
+          updated_at: new Date().toISOString(),
+        };
+        const { data: saved, error } = fresh
+          ? await admin.from("collected_data").insert(row).select("id").single()
+          : await admin
+              .from("collected_data")
+              .update(row)
+              .eq("id", current.id)
+              .eq("account_id", accountId)
+              .select("id")
+              .single();
+        if (error || !saved) {
+          console.error("[agente] salvar planilha", sheet.key, error?.message);
+          return "Não foi possível anotar agora. Continue a conversa normalmente.";
+        }
+        collected[sheet.key] = { id: saved.id as string, data: merged.data };
+        const missing = sheet.fields
+          .filter((f) => f.ask && !merged.data[f.key])
+          .map((f) => f.label);
+        return `Anotado na planilha "${sheet.name}"${fresh ? " (linha nova)" : ""}. ${missing.length ? `Ainda falta: ${missing.join(", ")}.` : ""} Não leia os dados de volta para a pessoa, a não ser que ela peça ou as instruções mandem enviar um resumo.`;
+      },
+    });
+  const allTools: ToolSet = {
+    ...tools,
+    ...Object.fromEntries(dataSheets.map((sh) => [sheetToolName(sh), sheetTool(sh)])),
+  };
+  // Sem agenda, a IA só chama a equipe (e anota nas planilhas, se o negócio tiver).
+  const activeTools = Object.keys(allTools).filter(
+    (k) => k.startsWith("salvar_") || booking || k === "chamar_atendente",
   );
   const run = (msgs: typeof messages, extraSystem = "") =>
     generateText({
       model,
       system: extraSystem ? `${system}\n\n${extraSystem}` : system,
       messages: msgs,
-      tools,
+      tools: allTools,
       activeTools,
       stopWhen: stepCountIs(8),
       temperature: 0.3,
@@ -873,7 +892,7 @@ async function generateAgentReply(
       model,
       system: `${system}\n\nConsulte a agenda agora com horarios_livres (ou conferir_horario, se a pessoa pediu dia e hora) e ofereça SOMENTE os horários devolvidos. Os horários que estavam na sua resposta anterior não foram conferidos e podem estar ocupados.`,
       messages,
-      tools,
+      tools: allTools,
       activeTools,
       prepareStep: ({ stepNumber }) =>
         stepNumber === 0 ? { toolChoice: "required" as const } : {},

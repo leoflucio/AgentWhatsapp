@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_FIELDS,
-  mergeSuggestedFields,
+  mergeSuggestedSheets,
+  normalizeSheets,
+  sheetToolName,
   collectPromptText,
   mergeValues,
   normalizeFields,
@@ -70,26 +72,94 @@ describe("parseValues", () => {
   });
 });
 
+describe("normalizeSheets", () => {
+  it("sem planilhas, usa os campos antigos numa planilha só", () => {
+    expect(normalizeSheets([], [{ label: "CPF" }])).toEqual([
+      { key: "geral", name: "Planilha", fields: [{ key: "cpf", label: "CPF", ask: true }] },
+    ]);
+    expect(normalizeSheets(null, null)).toEqual([]);
+  });
+  it("mantém chave, gera para as novas e ignora nome vazio ou repetido", () => {
+    const s = normalizeSheets([
+      { key: "prev", name: "Previdência", fields: [{ label: "Nome" }] },
+      { name: "Pessoa física", fields: [] },
+      { name: "" },
+      { name: "previdência" },
+    ]);
+    expect(s.map((x) => [x.key, x.name])).toEqual([
+      ["prev", "Previdência"],
+      ["pessoa_fisica", "Pessoa física"],
+    ]);
+    expect(sheetToolName(s[1]!)).toBe("salvar_pessoa_fisica");
+  });
+});
+
 describe("collectPromptText", () => {
-  const fields = normalizeFields([
-    { label: "Nome" },
-    { label: "CPF" },
-    { label: "Valor", ask: false },
+  const sheets = normalizeSheets([
+    {
+      key: "vida",
+      name: "Vida",
+      fields: [{ label: "Nome" }, { label: "CPF" }, { label: "Valor", ask: false }],
+    },
   ]);
   it("sem campos, nada", () => {
     expect(collectPromptText([], {})).toBe("");
+    expect(collectPromptText(normalizeSheets([{ name: "Vazia" }]), {})).toBe("");
   });
-  it("separa pedir, só anotar e já anotados", () => {
-    const t = collectPromptText(fields, { nome: "Ana" });
+  it("separa pedir, só anotar e registro atual", () => {
+    const t = collectPromptText(sheets, { vida: { nome: "Ana" } });
+    expect(t).toContain('Planilha "Vida" (ferramenta salvar_vida)');
     expect(t).toContain("Pedir, se ainda não souber: CPF.");
     expect(t).toContain("mandarem pedir): Valor.");
-    expect(t).toContain("Registro atual deste contato: Nome = Ana");
+    expect(t).toContain("nesta planilha: Nome = Ana");
     expect(t).toContain("novo_registro = true");
   });
-  it("tudo anotado: não manda pedir", () => {
-    const t = collectPromptText(fields, { nome: "Ana", cpf: "1", valor: "2" });
-    expect(t).not.toContain("Pedir,");
+  it("várias planilhas: manda escolher pelo tipo de pedido", () => {
+    const two = normalizeSheets([
+      { name: "Previdência", fields: [{ label: "Nome", ask: false }] },
+      { name: "Empresa", fields: [{ label: "CNPJ", ask: false }] },
+    ]);
+    const t = collectPromptText(two, {});
+    expect(t).toContain("PLANILHAS DO NEGÓCIO");
+    expect(t).toContain("salvar_previdencia");
+    expect(t).toContain("salvar_empresa");
+    expect(t).not.toContain("novo_registro");
     expect(t).not.toContain("Peça os dados");
+  });
+});
+
+describe("mergeSuggestedSheets", () => {
+  it("monta uma planilha por título e junta às atuais sem repetir", () => {
+    const existing = normalizeSheets([
+      { key: "prev", name: "Previdência", fields: [{ key: "nome", label: "Nome", ask: true }] },
+    ]);
+    const out = mergeSuggestedSheets(
+      existing,
+      "# Previdência\n- Nome\n- Valor a investir\n\n## **Empresa**\n1. CNPJ\nisto aqui é uma frase longa demais para ser um campo\nObservações",
+    );
+    expect(out).toEqual([
+      {
+        key: "prev",
+        name: "Previdência",
+        fields: [
+          { key: "nome", label: "Nome", ask: true },
+          { key: "valor_a_investir", label: "Valor a investir", ask: false },
+        ],
+      },
+      {
+        key: "empresa",
+        name: "Empresa",
+        fields: [
+          { key: "cnpj", label: "CNPJ", ask: false },
+          { key: "observacoes", label: "Observações", ask: false },
+        ],
+      },
+    ]);
+  });
+  it("campos sem título vão para uma planilha", () => {
+    const out = mergeSuggestedSheets([], "Nome\nCPF");
+    expect(out).toHaveLength(1);
+    expect(out[0]!.fields.map((f) => f.label)).toEqual(["Nome", "CPF"]);
   });
 });
 
@@ -106,26 +176,5 @@ describe("valuesCsv", () => {
     ]);
     expect(csv.startsWith("\uFEFFNome no WhatsApp;Telefone;Obs;Atualizado em\r\n")).toBe(true);
     expect(csv).toContain('Ana;5511999999999;"diz ""oi""; tchau";18/10/2026');
-  });
-});
-
-describe("mergeSuggestedFields", () => {
-  it("limpa a lista da IA, mantém os campos atuais e não repete", () => {
-    const existing = normalizeFields([{ key: "cpf", label: "CPF", ask: true }]);
-    const out = mergeSuggestedFields(
-      existing,
-      "1. Tipo\n- **Nome do cliente**\ncpf\n\nCapital segurado:\nisto aqui é uma frase longa demais para ser um campo da planilha\nObservações",
-    );
-    expect(out).toEqual([
-      { key: "cpf", label: "CPF", ask: true },
-      { key: "tipo", label: "Tipo", ask: false },
-      { key: "nome_do_cliente", label: "Nome do cliente", ask: false },
-      { key: "capital_segurado", label: "Capital segurado", ask: false },
-      { key: "observacoes", label: "Observações", ask: false },
-    ]);
-  });
-  it("respeita o máximo", () => {
-    const many = Array.from({ length: 30 }, (_, i) => `Campo ${i}`).join("\n");
-    expect(mergeSuggestedFields([], many)).toHaveLength(MAX_FIELDS);
   });
 });
