@@ -13,7 +13,7 @@ function Termos() {
     <LegalPage title="Termos de uso">
       <p>Atualizados em 18 de outubro de 2026.</p>
       <p>
-        Estes termos valem para quem cria uma conta no {APP_NAME}, um atendente virtual com
+        Estes termos valem para quem cria uma conta na {APP_NAME}, uma atendente virtual com
         inteligência artificial que responde, no WhatsApp do negócio, às mensagens dos clientes
         desse negócio. Ao criar a conta, você concorda com eles.
       </p>

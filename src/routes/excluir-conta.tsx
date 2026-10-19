@@ -12,7 +12,7 @@ function ExcluirConta() {
   return (
     <LegalPage title="Excluir sua conta">
       <p>
-        Para excluir sua conta do {APP_NAME} e os dados ligados a ela, envie um e-mail para{" "}
+        Para excluir sua conta da {APP_NAME} e os dados ligados a ela, envie um e-mail para{" "}
         <a className="underline" href={mail}>
           {SUPPORT_EMAIL}
         </a>{" "}

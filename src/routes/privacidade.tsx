@@ -12,17 +12,17 @@ function Privacidade() {
     <LegalPage title="Política de privacidade">
       <p>Atualizada em 17 de outubro de 2026.</p>
       <p>
-        O {APP_NAME} é um atendente virtual com inteligência artificial que responde, no WhatsApp de
-        cada negócio cliente, às mensagens dos clientes desse negócio. Esta política explica quais
-        dados tratamos, para quê e como pedir a exclusão, conforme a Lei Geral de Proteção de Dados
-        (Lei 13.709/2018).
+        A {APP_NAME} é uma atendente virtual com inteligência artificial que responde, no WhatsApp
+        de cada negócio cliente, às mensagens dos clientes desse negócio. Esta política explica
+        quais dados tratamos, para quê e como pedir a exclusão, conforme a Lei Geral de Proteção de
+        Dados (Lei 13.709/2018).
       </p>
 
       <h2>Quem é responsável pelos dados</h2>
       <p>
-        Pelos dados da conta (quem contrata o app), o {APP_NAME} é o controlador. Pelas conversas e
-        contatos dos clientes de cada negócio, o controlador é o próprio negócio; o {APP_NAME}
-        trata esses dados só para prestar o serviço contratado, como operador.
+        Pelos dados da conta (quem contrata o app), a {APP_NAME} é a controladora. Pelas conversas e
+        contatos dos clientes de cada negócio, o controlador é o próprio negócio; a {APP_NAME} trata
+        esses dados só para prestar o serviço contratado, como operadora.
       </p>
 
       <h2>Dados que tratamos</h2>
