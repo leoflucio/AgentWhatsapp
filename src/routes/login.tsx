@@ -13,12 +13,18 @@ import { maskPhone } from "@/lib/phone";
 import { getGoogleClientId } from "@/lib/google-login.functions";
 import { googleId, loadGoogleIdentity, makeNonce } from "@/lib/google-identity";
 
-export const Route = createFileRoute("/login")({ component: LoginPage });
+export const Route = createFileRoute("/login")({
+  // ?criar=1 abre direto em "Criar conta" (botões da página de vendas).
+  validateSearch: (s: Record<string, unknown>): { criar?: boolean } =>
+    s.criar === 1 || s.criar === "1" || s.criar === true ? { criar: true } : {},
+  component: LoginPage,
+});
 
 function LoginPage() {
   const { session } = useAuth();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"entrar" | "criar">("entrar");
+  const { criar } = Route.useSearch();
+  const [mode, setMode] = useState<"entrar" | "criar">(criar ? "criar" : "entrar");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
