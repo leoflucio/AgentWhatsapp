@@ -64,7 +64,7 @@ export const saveAgentSettings = createServerFn({ method: "POST" })
         healthRules: z.boolean(),
         instructions: z.string().max(8000),
         replyClients: z.boolean(),
-        takeoverMinutes: z.number().int().min(0).max(1440),
+        takeoverMinutes: z.number().int().min(-1).max(1440),
         slotMinutes: z.number().int().min(15).max(180),
         sequentialFill: z.boolean(),
         followupEnabled: z.boolean(),
@@ -128,7 +128,7 @@ export const saveAgentSettings = createServerFn({ method: "POST" })
 
     // O novo prazo vale também para as conversas que já estão com a equipe:
     // nenhuma fica presa além de "agora + prazo" (as assumidas pelo botão não mudam).
-    if (clampTakeoverMinutes(data.takeoverMinutes) !== NO_AUTO_RETURN) {
+    if (clampTakeoverMinutes(data.takeoverMinutes) > NO_AUTO_RETURN) {
       const limit = takeoverUntilISO(Date.now(), data.takeoverMinutes);
       await admin
         .from("conversations")

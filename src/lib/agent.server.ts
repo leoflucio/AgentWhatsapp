@@ -192,7 +192,7 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
     await admin
       .from("conversations")
       .update({
-        ...takeoverPatch(Date.now(), settings?.takeover_minutes),
+        ...takeoverPatch(Date.now(), settings?.takeover_minutes, true),
         attention_reason: null,
         last_message_at: now,
       })

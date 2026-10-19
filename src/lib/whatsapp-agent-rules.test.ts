@@ -435,6 +435,12 @@ describe("devolução automática ao agente", () => {
     expect(takeoverPatch(now, undefined)).toEqual({ takeover_until: "2026-10-08T12:05:00.000Z" });
     expect(takeoverPatch(now, 0)).toEqual({ human_takeover: true, takeover_until: null });
     expect(takeoverLabel(0)).toContain("Devolver ao agente");
+    // Volta assim que a equipe responde: chamar a equipe silencia sem prazo,
+    // a resposta da equipe devolve na hora.
+    expect(takeoverPatch(now, -1)).toEqual({ human_takeover: true, takeover_until: null });
+    expect(takeoverPatch(now, -1, true)).toEqual({ human_takeover: false, takeover_until: null });
+    expect(takeoverPatch(now, 30, true)).toEqual({ takeover_until: "2026-10-08T12:30:00.000Z" });
+    expect(takeoverLabel(-1)).toBe("Assim que a equipe responder");
   });
   it("rótulos", () => {
     expect(takeoverLabel(30)).toBe("30 minutos");

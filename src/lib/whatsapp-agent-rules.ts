@@ -548,29 +548,56 @@ export function inPeriod(hora: string, periodo: DayPeriod | null | undefined): b
  * só pelo botão "Devolver ao agente".
  */
 export const NO_AUTO_RETURN = 0;
-export const TAKEOVER_OPTIONS = [5, 15, 30, 60, 120, 240, 1440, NO_AUTO_RETURN] as const;
+/**
+ * O agente chamou a equipe: fica em silêncio até a equipe responder; a
+ * primeira resposta da equipe já devolve a conversa ao agente.
+ */
+export const RETURN_ON_TEAM_REPLY = -1;
+export const TAKEOVER_OPTIONS = [
+  RETURN_ON_TEAM_REPLY,
+  5,
+  15,
+  30,
+  60,
+  120,
+  240,
+  1440,
+  NO_AUTO_RETURN,
+] as const;
 export const DEFAULT_TAKEOVER_MINUTES = 5;
 
 export function clampTakeoverMinutes(v: unknown): number {
   if (v === null || v === undefined || v === "") return DEFAULT_TAKEOVER_MINUTES;
   const n = Math.round(Number(v));
-  if (n === NO_AUTO_RETURN) return NO_AUTO_RETURN;
+  if (n === NO_AUTO_RETURN || n === RETURN_ON_TEAM_REPLY) return n;
   if (!Number.isFinite(n) || n < 0) return DEFAULT_TAKEOVER_MINUTES;
   return Math.min(1440, Math.max(5, n));
 }
 
 /** Até quando a equipe fica com a conversa a partir de agora (com volta automática). */
 export function takeoverUntilISO(nowMs: number, minutes: number): string {
-  const m = clampTakeoverMinutes(minutes) || DEFAULT_TAKEOVER_MINUTES;
+  const c = clampTakeoverMinutes(minutes);
+  const m = c > 0 ? c : DEFAULT_TAKEOVER_MINUTES;
   return new Date(nowMs + m * 60_000).toISOString();
 }
 
-/** Campos da conversa quando a equipe assume: prazo, ou sem volta automática. */
+/**
+ * Campos da conversa quando a equipe assume: prazo, ou sem volta automática.
+ * `teamReplied` = a equipe acabou de responder pelo celular (senão, foi o
+ * agente que chamou a equipe). Em RETURN_ON_TEAM_REPLY a resposta da equipe
+ * devolve a conversa ao agente na hora.
+ */
 export function takeoverPatch(
   nowMs: number,
   minutes: unknown,
-): { takeover_until: string } | { human_takeover: true; takeover_until: null } {
+  teamReplied = false,
+): { takeover_until: string | null; human_takeover?: boolean } {
   const m = clampTakeoverMinutes(minutes);
+  if (m === RETURN_ON_TEAM_REPLY) {
+    return teamReplied
+      ? { human_takeover: false, takeover_until: null }
+      : { human_takeover: true, takeover_until: null };
+  }
   if (m === NO_AUTO_RETURN) return { human_takeover: true, takeover_until: null };
   return { takeover_until: takeoverUntilISO(nowMs, m) };
 }
@@ -589,6 +616,7 @@ export function takeoverUntilText(untilISO: string, nowMs: number): string {
 
 /** "15 minutos", "1 hora", "24 horas". */
 export function takeoverLabel(minutes: number): string {
+  if (minutes === RETURN_ON_TEAM_REPLY) return "Assim que a equipe responder";
   if (minutes === NO_AUTO_RETURN) return "Não voltar sozinho (só pelo botão Devolver ao agente)";
   if (minutes < 60) return `${minutes} minutos`;
   const h = minutes / 60;
