@@ -24,6 +24,7 @@ import {
   type DataValues,
 } from "@/lib/collected-data-rules";
 import {
+  clampCapacity,
   formatLocal,
   localDateTimeOf,
   localDateTimeToUTC,
@@ -33,6 +34,7 @@ import {
 import { listFreeSlots, scheduleOf } from "@/lib/agenda.server";
 import { sendText, transcribeAudio } from "@/lib/evolution.server";
 import {
+  AGENT_BOOKED_NOTE,
   buildSystemPrompt,
   cameFromAd,
   cleanReply,
@@ -422,6 +424,10 @@ async function generateAgentReply(
   const slotMinutes = Math.max(15, Number(settings?.slot_minutes ?? 60));
   const schedule = scheduleOf(settings);
   const sequential = settings?.sequential_fill !== false;
+  // Vagas por horário (1 = exclusivo) e "agendar direto" (sem a equipe confirmar).
+  const capacity = clampCapacity(settings?.slot_capacity);
+  const autoConfirm = settings?.auto_confirm === true;
+  const bookedStatus = autoConfirm ? "confirmado" : "reservado";
   // Sem agenda, o agente só informa e passa para a equipe o que precisar de ação.
   const booking = settings?.booking_enabled !== false;
   const today = todayLocalISO();
@@ -433,6 +439,7 @@ async function generateAgentReply(
       days,
       durationMin: slotMinutes,
       maxResults,
+      capacity,
     });
 
   const { data: history } = await admin
@@ -450,7 +457,7 @@ async function generateAgentReply(
   // Horários futuros desta pessoa: reservas do agente e horários já confirmados.
   const { data: upcoming } = await admin
     .from("bookings")
-    .select("id, starts_at, status, contact_name, phone, conversation_id")
+    .select("id, starts_at, status, contact_name, phone, conversation_id, notes")
     .eq("account_id", accountId)
     .eq("kind", "reserva")
     .neq("status", "cancelado")
@@ -460,15 +467,21 @@ async function generateAgentReply(
   const mineRows = ((upcoming ?? []) as any[]).filter(
     (b) => b.conversation_id === conv.id || (b.phone && samePhoneBR(b.phone, phone)),
   );
+  // O que o agente pode trocar ou desmarcar: reservas e, com "agendar direto",
+  // os horários que ele mesmo marcou. Horário marcado ou confirmado pela equipe, não.
+  const ownedByAgent = (b: any) =>
+    b.status === "reservado" ||
+    (autoConfirm && b.status === "confirmado" && b.notes === AGENT_BOOKED_NOTE);
   const holdList = mineRows
-    .filter((b) => b.status === "reservado")
+    .filter(ownedByAgent)
     .slice(0, 3)
     .map((b) => ({
       id: b.id as string,
       starts_at: b.starts_at as string,
+      status: b.status as string,
       contact_name: (b.contact_name as string | null) ?? null,
     }));
-  const myAppts = mineRows.filter((b) => b.status === "confirmado").slice(0, 3);
+  const myAppts = mineRows.filter((b) => b.status === "confirmado" && !ownedByAgent(b)).slice(0, 3);
   const holdText = holdList.map((h) => formatLocal(h.starts_at)).join(", ");
   const apptText = myAppts.map((a) => formatLocal(a.starts_at)).join(", ");
 
@@ -490,7 +503,7 @@ async function generateAgentReply(
     !booking
       ? ""
       : holdText
-        ? `Já tem horário reservado por aqui: ${holdText}. NÃO ofereça horário de novo; só troque (trocar_reserva) ou desmarque (cancelar_reserva) se a pessoa pedir.`
+        ? `Já tem horário ${autoConfirm ? "agendado" : "reservado"} por aqui: ${holdText}. NÃO ofereça horário de novo; só troque (trocar_reserva) ou desmarque (cancelar_reserva) se a pessoa pedir.`
         : apptText
           ? ""
           : "Ainda não tem horário reservado.",
@@ -545,6 +558,7 @@ async function generateAgentReply(
       Object.fromEntries(Object.entries(collected).map(([k, v]) => [k, v.data])),
     ),
     sequentialFill: sequential,
+    autoConfirm,
   });
 
   const dataField = z
@@ -612,10 +626,10 @@ async function generateAgentReply(
         account_id: accountId,
         conversation_id: conv.id,
         kind: "reserva",
-        status: "reservado",
+        status: bookedStatus,
         contact_name: old.contact_name,
         phone,
-        notes: "Trocado pelo agente de WhatsApp.",
+        notes: autoConfirm ? AGENT_BOOKED_NOTE : "Trocado pelo agente de WhatsApp.",
         starts_at: slot.start,
         ends_at: slot.end,
       })
@@ -627,13 +641,17 @@ async function generateAgentReply(
       .from("bookings")
       .update({ status: "cancelado" })
       .eq("id", old.id)
-      .eq("status", "reservado");
+      .eq("status", old.status);
     if (delErr) {
       await admin.from("bookings").delete().eq("id", created.id);
       return "Não foi possível trocar agora. Use chamar_atendente.";
     }
-    holdList.splice(0, 1, { ...old, id: created.id, starts_at: slot.start });
-    return `Reserva trocada para ${slot.label}; o horário anterior (${formatLocal(old.starts_at)}) foi liberado. Diga que a equipe vai confirmar o novo horário.`;
+    holdList.splice(0, 1, { ...old, id: created.id, starts_at: slot.start, status: bookedStatus });
+    return `${autoConfirm ? "Horário trocado" : "Reserva trocada"} para ${slot.label}; o horário anterior (${formatLocal(old.starts_at)}) foi liberado. ${
+      autoConfirm
+        ? "Diga que o novo horário está agendado."
+        : "Diga que a equipe vai confirmar o novo horário."
+    }`;
   };
 
   const tools = {
@@ -703,8 +721,9 @@ async function generateAgentReply(
       },
     }),
     reservar_horario: tool({
-      description:
-        "Reserva (não marca) um horário livre da agenda para esta pessoa. A equipe confirma depois. Se ela já tem reserva feita por aqui, troca a reserva para o novo horário (a antiga é liberada).",
+      description: autoConfirm
+        ? "Agenda (já confirmado) um horário livre da agenda para esta pessoa. Se ela já tem horário marcado por aqui, troca para o novo horário (o antigo é liberado)."
+        : "Reserva (não marca) um horário livre da agenda para esta pessoa. A equipe confirma depois. Se ela já tem reserva feita por aqui, troca a reserva para o novo horário (a antiga é liberada).",
       inputSchema: z.object({
         data: dataField,
         hora: horaField,
@@ -720,10 +739,10 @@ async function generateAgentReply(
           account_id: accountId,
           conversation_id: conv.id,
           kind: "reserva",
-          status: "reservado",
+          status: bookedStatus,
           contact_name: nome.trim(),
           phone,
-          notes: "Reservado pelo agente de WhatsApp.",
+          notes: autoConfirm ? AGENT_BOOKED_NOTE : "Reservado pelo agente de WhatsApp.",
           starts_at: slot.start,
           ends_at: slot.end,
         });
@@ -732,7 +751,11 @@ async function generateAgentReply(
         await admin.from("conversations").update({ contact_name: nome.trim() }).eq("id", conv.id);
         const follow = reservationFollowUp({ address: ctx.account.address });
         if (follow) followUps.push(follow);
-        return `Reservado: ${slot.label}. Diga que a equipe vai confirmar o agendamento.${
+        return `${
+          autoConfirm
+            ? `Agendado: ${slot.label}. Diga que o horário está agendado (já confirmado na agenda).`
+            : `Reservado: ${slot.label}. Diga que a equipe vai confirmar o agendamento.`
+        }${
           follow
             ? " O endereço será enviado automaticamente logo depois da sua resposta: não escreva o endereço."
             : " Informe também o endereço (das instruções), se houver."
@@ -760,11 +783,11 @@ async function generateAgentReply(
           .from("bookings")
           .update({ status: "cancelado" })
           .eq("id", old.id)
-          .eq("status", "reservado");
+          .eq("status", old.status);
         if (error) return "Não foi possível desmarcar agora. Use chamar_atendente.";
         acted = true;
         holdList.splice(0, 1);
-        return `Reserva de ${formatLocal(old.starts_at)} desmarcada e horário liberado.`;
+        return `Horário de ${formatLocal(old.starts_at)} desmarcado e liberado.`;
       },
     }),
     chamar_atendente: tool({

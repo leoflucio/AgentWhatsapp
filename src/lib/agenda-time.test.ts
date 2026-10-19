@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_SCHEDULE } from "./agenda-hours";
 import {
   addDaysISO,
+  clampCapacity,
   freeSlots,
   localDateTimeOf,
   localDateTimeToUTC,
@@ -69,5 +70,42 @@ describe("freeSlots", () => {
       "16:00",
       "17:00",
     ]);
+  });
+
+  it("com vagas por horário, só fecha quando lota; bloqueio fecha sempre", () => {
+    const at = (hora: string) => {
+      const s = localDateTimeToUTC("2026-10-05", hora)!;
+      return {
+        starts_at: s.toISOString(),
+        ends_at: new Date(s.getTime() + 3600_000).toISOString(),
+      };
+    };
+    const busy = [
+      { ...at("08:00"), kind: "reserva" },
+      { ...at("09:00"), kind: "reserva" },
+      { ...at("09:00"), kind: "reserva" },
+      { ...at("10:00"), kind: "bloqueio" },
+    ];
+    const horas = (capacity: number) =>
+      freeSlots({
+        schedule: DEFAULT_SCHEDULE,
+        busy,
+        fromDate: "2026-10-05",
+        days: 1,
+        durationMin: 60,
+        maxResults: 3,
+        nowMs: now,
+        capacity,
+      }).map((sl) => localDateTimeOf(sl.start).hora);
+    expect(horas(1)).toEqual(["11:00", "12:00", "13:00"]);
+    expect(horas(2)).toEqual(["08:00", "11:00", "12:00"]);
+    expect(horas(3)).toEqual(["08:00", "09:00", "11:00"]);
+  });
+
+  it("vagas inválidas viram 1", () => {
+    expect(clampCapacity(0)).toBe(1);
+    expect(clampCapacity("abc")).toBe(1);
+    expect(clampCapacity(3.7)).toBe(3);
+    expect(clampCapacity(999)).toBe(50);
   });
 });

@@ -109,23 +109,36 @@ export interface Slot {
   label: string;
 }
 
+/** Quantas pessoas cabem no mesmo horário (1 = horário exclusivo). */
+export const MAX_SLOT_CAPACITY = 50;
+
+export function clampCapacity(v: unknown): number {
+  const n = Math.floor(Number(v));
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(n, MAX_SLOT_CAPACITY);
+}
+
 /**
  * Horários livres dentro do horário de atendimento, de `durationMin` em
- * `durationMin`, sem sobrepor nenhum intervalo ocupado e só no futuro.
+ * `durationMin`, só no futuro. Um bloqueio fecha o horário; reservas e
+ * horários marcados ocupam uma vaga cada, até `capacity` (padrão 1).
  */
 export function freeSlots(args: {
   schedule: Record<number, DayWindow[]>;
-  busy: Array<{ starts_at: string; ends_at: string }>;
+  busy: Array<{ starts_at: string; ends_at: string; kind?: string | null }>;
   fromDate: string;
   days: number;
   durationMin: number;
   maxResults?: number;
   nowMs?: number;
+  capacity?: number;
 }): Slot[] {
-  const busyRanges = args.busy.map((b) => [
-    new Date(b.starts_at).getTime(),
-    new Date(b.ends_at).getTime(),
-  ]);
+  const busyRanges = args.busy.map((b) => ({
+    s: new Date(b.starts_at).getTime(),
+    e: new Date(b.ends_at).getTime(),
+    block: b.kind === "bloqueio",
+  }));
+  const capacity = clampCapacity(args.capacity ?? 1);
   const now = args.nowMs ?? Date.now();
   const out: Slot[] = [];
   const step = args.durationMin;
@@ -136,10 +149,8 @@ export function freeSlots(args: {
         const start = localToUTC(dateISO, m);
         const end = new Date(start.getTime() + step * 60000);
         if (start.getTime() <= now) continue;
-        const overlaps = busyRanges.some(
-          ([bs, be]) => start.getTime() < be! && end.getTime() > bs!,
-        );
-        if (overlaps) continue;
+        const hits = busyRanges.filter((b) => start.getTime() < b.e && end.getTime() > b.s);
+        if (hits.some((b) => b.block) || hits.length >= capacity) continue;
         out.push({
           start: start.toISOString(),
           end: end.toISOString(),

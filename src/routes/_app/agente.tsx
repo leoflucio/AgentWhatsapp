@@ -342,6 +342,32 @@ function AgentePage() {
                 onCheckedChange={(v) => set("sequentialFill", v)}
               />
             </label>
+            <div className="space-y-2">
+              <Label htmlFor="vagas">Pessoas por horário</Label>
+              <NumericInput
+                id="vagas"
+                min={1}
+                max={50}
+                fallback={1}
+                value={s.slotCapacity}
+                onValueChange={(v) => set("slotCapacity", v)}
+              />
+              <p className="text-xs text-muted-foreground">
+                1 = cada horário é de uma pessoa só (fica bloqueado depois de marcado). Use mais se
+                atende várias pessoas no mesmo horário (turma, mais de um profissional, mais de uma
+                sala).
+              </p>
+            </div>
+            <label className="flex items-center justify-between gap-4">
+              <span className="text-sm">
+                Agendar direto
+                <span className="block text-xs text-muted-foreground">
+                  Ligado: a secretária marca o horário já confirmado. Desligado: ela reserva e a
+                  equipe confirma na Agenda.
+                </span>
+              </span>
+              <Switch checked={s.autoConfirm} onCheckedChange={(v) => set("autoConfirm", v)} />
+            </label>
           </div>
         </CardContent>
       </Card>

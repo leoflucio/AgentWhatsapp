@@ -13,16 +13,16 @@ export async function busyIntervals(
   accountId: string,
   fromISO: string,
   toISO: string,
-): Promise<Array<{ starts_at: string; ends_at: string }>> {
+): Promise<Array<{ starts_at: string; ends_at: string; kind: string }>> {
   const { data, error } = await admin
     .from("bookings")
-    .select("starts_at, ends_at")
+    .select("starts_at, ends_at, kind")
     .eq("account_id", accountId)
     .neq("status", "cancelado")
     .lt("starts_at", toISO)
     .gt("ends_at", fromISO);
   if (error) throw new Error(error.message);
-  return (data ?? []) as Array<{ starts_at: string; ends_at: string }>;
+  return (data ?? []) as Array<{ starts_at: string; ends_at: string; kind: string }>;
 }
 
 export async function listFreeSlots(
@@ -34,6 +34,8 @@ export async function listFreeSlots(
     days: number;
     durationMin: number;
     maxResults?: number;
+    /** Pessoas por horário (1 = exclusivo). */
+    capacity?: number;
   },
 ): Promise<Slot[]> {
   const busy = await busyIntervals(

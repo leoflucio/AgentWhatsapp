@@ -462,3 +462,13 @@ describe("unverifiedOffer sem dia citado", () => {
     expect(unverifiedOffer("Tenho às 10h, qual prefere?", "2026-10-15 10:00")).toEqual([]);
   });
 });
+
+describe("agendar direto", () => {
+  it("troca a regra de só reservar pela de agendar", () => {
+    const base = { today: "05/10/2026", contact: "Contato novo." };
+    expect(buildSystemPrompt(base)).toContain("Você NÃO confirma agendamentos");
+    const auto = buildSystemPrompt({ ...base, autoConfirm: true });
+    expect(auto).toContain("Você AGENDA direto");
+    expect(auto).not.toContain("Você NÃO confirma agendamentos");
+  });
+});
