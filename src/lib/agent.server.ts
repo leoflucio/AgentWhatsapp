@@ -131,11 +131,12 @@ async function hasNewerContactMessage(
 }
 
 /**
- * O agente já respondeu depois da última mensagem do contato (outra execução,
- * de uma mensagem anterior da mesma rajada, chegou antes). Responder de novo
- * repete a mesma coisa ("já repassei para a equipe" três vezes).
+ * Quem já respondeu depois da última mensagem do contato: o agente (outra
+ * execução da mesma rajada chegou antes; responder de novo repete a mesma
+ * coisa) ou a equipe pelo celular (enquanto a IA pensava; a resposta do
+ * agente passaria por cima da equipe). null = ninguém.
  */
-async function alreadyAnswered(admin: any, conversationId: string): Promise<boolean> {
+async function answeredBy(admin: any, conversationId: string): Promise<"agente" | "equipe" | null> {
   const { data: lastContact } = await admin
     .from("messages")
     .select("created_at")
@@ -144,15 +145,17 @@ async function alreadyAnswered(admin: any, conversationId: string): Promise<bool
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (!lastContact) return false;
+  if (!lastContact) return null;
   const { data } = await admin
     .from("messages")
-    .select("id")
+    .select("author")
     .eq("conversation_id", conversationId)
-    .eq("author", "agente")
+    .in("author", ["agente", "equipe"])
     .gt("created_at", lastContact.created_at)
-    .limit(1);
-  return (data ?? []).length > 0;
+    .limit(5);
+  const authors = ((data ?? []) as any[]).map((r) => r.author as string);
+  if (authors.includes("equipe")) return "equipe";
+  return authors.includes("agente") ? "agente" : null;
 }
 
 async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
@@ -330,7 +333,7 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
   // webhook próprio, em paralelo. Só a mais recente responde, vendo todas.
   await new Promise((resolve) => setTimeout(resolve, BURST_WAIT_MS));
   if (await hasNewerContactMessage(admin, conv.id, mine.created_at)) return;
-  if (await alreadyAnswered(admin, conv.id)) return;
+  if (await answeredBy(admin, conv.id)) return;
 
   // "Ok", "Combinado", "Obrigado" sem pergunta pendente do agente: a conversa
   // terminou bem; responder de novo só gera "posso ajudar?" repetido.
@@ -376,10 +379,12 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
   // a execução da mensagem nova responde tudo. Se esta mexeu na agenda ou
   // chamou a equipe, envia assim mesmo (a pessoa precisa saber).
   if (!out?.acted && (await hasNewerContactMessage(admin, conv.id, mine.created_at))) return;
-  // A IA demorou e outra execução da mesma rajada já respondeu tudo: não
-  // repete. Só envia assim mesmo se esta mexeu na agenda (a pessoa precisa saber).
-  if (!out?.agendaChanged && (await alreadyAnswered(admin, conv.id))) {
-    console.log("[agente] já respondido por outra execução", conv.id);
+  // A IA demorou e alguém já respondeu: a equipe pelo celular (nunca passa por
+  // cima dela) ou outra execução da mesma rajada (não repete; só envia assim
+  // mesmo se esta mexeu na agenda, porque a pessoa precisa saber).
+  const answered = await answeredBy(admin, conv.id);
+  if (answered === "equipe" || (answered === "agente" && !out?.agendaChanged)) {
+    console.log("[agente] já respondido por", answered, conv.id);
     return;
   }
 
