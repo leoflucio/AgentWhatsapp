@@ -25,6 +25,8 @@ export type EvoIncoming = {
     imageMessage?: { caption?: string };
     audioMessage?: { seconds?: number; mimetype?: string; ptt?: boolean };
     videoMessage?: { caption?: string };
+    documentMessage?: { caption?: string; fileName?: string };
+    stickerMessage?: unknown;
     buttonsResponseMessage?: { selectedDisplayText?: string };
     listResponseMessage?: { title?: string };
   };
@@ -64,6 +66,21 @@ export function textOf(m: EvoIncoming): string {
     msg.listResponseMessage?.title ??
     ""
   ).trim();
+}
+
+/**
+ * Mensagem sem texto que é conteúdo de verdade (áudio, foto, vídeo, arquivo,
+ * figurinha), com um rótulo para o histórico. Reação, apagar e editar
+ * (protocolMessage) não contam: devolvem null.
+ */
+export function mediaLabel(m: EvoIncoming): string | null {
+  const msg = m.message ?? {};
+  if (msg.audioMessage) return "(mensagem de voz)";
+  if (msg.imageMessage) return "(foto)";
+  if (msg.videoMessage) return "(vídeo)";
+  if (msg.documentMessage) return "(arquivo)";
+  if (msg.stickerMessage) return "(figurinha)";
+  return null;
 }
 
 /** Áudio recebido (mensagem de voz ou arquivo de áudio) e a duração em segundos. */

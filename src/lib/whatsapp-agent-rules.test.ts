@@ -472,3 +472,16 @@ describe("agendar direto", () => {
     expect(auto).not.toContain("Você NÃO confirma agendamentos");
   });
 });
+
+describe("mídia mandada pela equipe", () => {
+  it("áudio, foto e arquivo contam; reação e apagar não", async () => {
+    const { mediaLabel } = await import("./whatsapp-agent-rules");
+    expect(mediaLabel({ message: { audioMessage: { seconds: 60, ptt: true } } })).toBe(
+      "(mensagem de voz)",
+    );
+    expect(mediaLabel({ message: { imageMessage: {} } })).toBe("(foto)");
+    expect(mediaLabel({ message: { documentMessage: { fileName: "a.pdf" } } })).toBe("(arquivo)");
+    expect(mediaLabel({ message: {} })).toBeNull();
+    expect(mediaLabel({ message: { reactionMessage: { text: "👍" } } } as never)).toBeNull();
+  });
+});

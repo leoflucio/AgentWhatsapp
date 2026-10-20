@@ -44,6 +44,7 @@ import {
   inPeriod,
   BURST_WAIT_MS,
   isGroupOrBroadcast,
+  mediaLabel,
   onlyAcknowledgments,
   sequentialOffer,
   unverifiedOffer,
@@ -200,14 +201,17 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
   // assumiu. O agente fica em silêncio nesta conversa e volta sozinho depois
   // do intervalo configurado sem a equipe responder (cada mensagem renova).
   if (m.key?.fromMe) {
-    if (!text) return;
+    // Áudio, foto ou arquivo mandado pelo celular também é a equipe respondendo
+    // (o agente só envia texto). Reação, apagar e editar não contam.
+    const teamBody = text || mediaLabel(m);
+    if (!teamBody) return;
     // Eco de uma resposta do próprio agente (registrada antes do envio).
     const { data: echo } = await admin
       .from("messages")
       .select("id")
       .eq("conversation_id", conv.id)
       .eq("author", "agente")
-      .eq("body", text)
+      .eq("body", teamBody)
       .gte("created_at", new Date(Date.now() - 10 * 60_000).toISOString())
       .limit(1);
     if ((echo ?? []).length > 0) return;
@@ -215,7 +219,7 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
       conversation_id: conv.id,
       account_id: accountId,
       author: "equipe",
-      body: text,
+      body: teamBody,
       wa_message_id: m.key?.id ?? null,
     });
     if (error) return; // é o eco de uma mensagem do próprio agente
