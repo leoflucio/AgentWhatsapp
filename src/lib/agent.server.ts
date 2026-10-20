@@ -130,6 +130,31 @@ async function hasNewerContactMessage(
   return (data ?? []).length > 0;
 }
 
+/**
+ * O agente já respondeu depois da última mensagem do contato (outra execução,
+ * de uma mensagem anterior da mesma rajada, chegou antes). Responder de novo
+ * repete a mesma coisa ("já repassei para a equipe" três vezes).
+ */
+async function alreadyAnswered(admin: any, conversationId: string): Promise<boolean> {
+  const { data: lastContact } = await admin
+    .from("messages")
+    .select("created_at")
+    .eq("conversation_id", conversationId)
+    .eq("author", "contato")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!lastContact) return false;
+  const { data } = await admin
+    .from("messages")
+    .select("id")
+    .eq("conversation_id", conversationId)
+    .eq("author", "agente")
+    .gt("created_at", lastContact.created_at)
+    .limit(1);
+  return (data ?? []).length > 0;
+}
+
 async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
   if (isGroupOrBroadcast(m.key?.remoteJid)) return;
   const phone = phoneOf(m);
@@ -305,6 +330,7 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
   // webhook próprio, em paralelo. Só a mais recente responde, vendo todas.
   await new Promise((resolve) => setTimeout(resolve, BURST_WAIT_MS));
   if (await hasNewerContactMessage(admin, conv.id, mine.created_at)) return;
+  if (await alreadyAnswered(admin, conv.id)) return;
 
   // "Ok", "Combinado", "Obrigado" sem pergunta pendente do agente: a conversa
   // terminou bem; responder de novo só gera "posso ajudar?" repetido.
@@ -350,6 +376,12 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
   // a execução da mensagem nova responde tudo. Se esta mexeu na agenda ou
   // chamou a equipe, envia assim mesmo (a pessoa precisa saber).
   if (!out?.acted && (await hasNewerContactMessage(admin, conv.id, mine.created_at))) return;
+  // A IA demorou e outra execução da mesma rajada já respondeu tudo: não
+  // repete. Só envia assim mesmo se esta mexeu na agenda (a pessoa precisa saber).
+  if (!out?.agendaChanged && (await alreadyAnswered(admin, conv.id))) {
+    console.log("[agente] já respondido por outra execução", conv.id);
+    return;
+  }
 
   for (const reply of toSend) {
     // Registra ANTES de enviar: o eco da mensagem (fromMe) é reconhecido como
@@ -405,7 +437,13 @@ async function findListedContact(
 async function generateAgentReply(
   admin: any,
   args: { ctx: Ctx; settings: any; conv: any; phone: string; listed: ListedContact | null },
-): Promise<{ text: string; followUps: string[]; acted: boolean; calledTeam: boolean } | null> {
+): Promise<{
+  text: string;
+  followUps: string[];
+  acted: boolean;
+  calledTeam: boolean;
+  agendaChanged: boolean;
+} | null> {
   const model = aiModel("main");
   if (!model) return null;
   // Mensagens automáticas enviadas depois da resposta (endereço).
@@ -413,6 +451,8 @@ async function generateAgentReply(
   // Alguma ferramenta mudou a agenda ou chamou a equipe nesta resposta.
   let acted = false;
   let calledTeam = false;
+  // Reservou, trocou ou desmarcou horário nesta resposta.
+  let agendaChanged = false;
   const { ctx, settings, conv, phone, listed } = args;
   const accountId = ctx.account.id;
   // A IA só vê e devolve data e hora LOCAIS (Brasília). Nunca ISO/UTC: com
@@ -637,6 +677,7 @@ async function generateAgentReply(
       .single();
     if (error || !created) return "Não foi possível trocar agora. Use chamar_atendente.";
     acted = true;
+    agendaChanged = true;
     const { error: delErr } = await admin
       .from("bookings")
       .update({ status: "cancelado" })
@@ -748,6 +789,7 @@ async function generateAgentReply(
         });
         if (error) return "Não foi possível reservar agora. Use chamar_atendente.";
         acted = true;
+        agendaChanged = true;
         await admin.from("conversations").update({ contact_name: nome.trim() }).eq("id", conv.id);
         const follow = reservationFollowUp({ address: ctx.account.address });
         if (follow) followUps.push(follow);
@@ -786,6 +828,7 @@ async function generateAgentReply(
           .eq("status", old.status);
         if (error) return "Não foi possível desmarcar agora. Use chamar_atendente.";
         acted = true;
+        agendaChanged = true;
         holdList.splice(0, 1);
         return `Horário de ${formatLocal(old.starts_at)} desmarcado e liberado.`;
       },
@@ -942,11 +985,12 @@ async function generateAgentReply(
         followUps,
         acted,
         calledTeam,
+        agendaChanged,
       };
     }
   }
   const reply = stripClosingOffer(cleanReply(result.text));
-  return { text: reply, followUps, acted, calledTeam };
+  return { text: reply, followUps, acted, calledTeam, agendaChanged };
 }
 
 /** Atualiza o resumo da conversa a cada SUMMARY_EVERY mensagens (memória longa). */
