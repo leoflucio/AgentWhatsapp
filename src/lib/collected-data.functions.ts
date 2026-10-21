@@ -166,20 +166,36 @@ export const suggestDataSheets = createServerFn({ method: "POST" })
       throw new Error("Escreva as instruções do agente (tela Agente) antes de criar as planilhas.");
     }
     const { aiModel } = await import("@/lib/ai.server");
-    const model = aiModel("lite");
-    if (!model) throw new Error("IA não configurada no servidor.");
     const { generateText } = await import("ai");
-    const r = await generateText({
-      model,
-      system: SUGGEST_FIELDS_SYSTEM,
-      prompt: `<instrucoes>\n${instructions.slice(0, 8000)}\n</instrucoes>`,
-      temperature: 0,
-      maxRetries: 2,
-    });
+    // O modelo lite às vezes fica sobrecarregado (503 "Service Unavailable"):
+    // tenta de novo com o modelo principal antes de desistir.
+    let text: string | null = null;
+    for (const kind of ["lite", "main"] as const) {
+      const model = aiModel(kind);
+      if (!model) throw new Error("IA não configurada no servidor.");
+      try {
+        const r = await generateText({
+          model,
+          system: SUGGEST_FIELDS_SYSTEM,
+          prompt: `<instrucoes>\n${instructions.slice(0, 8000)}\n</instrucoes>`,
+          temperature: 0,
+          maxRetries: 1,
+        });
+        text = r.text;
+        break;
+      } catch (e) {
+        console.error(`[dados] sugestão de planilhas falhou (${kind}):`, e);
+      }
+    }
+    if (text === null) {
+      throw new Error(
+        "A IA do Google está sobrecarregada agora. Tente de novo em alguns minutos ou monte as planilhas à mão.",
+      );
+    }
     return {
       sheets: mergeSuggestedSheets(
         normalizeSheets(settings?.data_sheets, settings?.data_fields),
-        r.text,
+        text,
       ),
     };
   });
