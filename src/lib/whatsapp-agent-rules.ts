@@ -616,21 +616,34 @@ export function takeoverUntilISO(nowMs: number, minutes: number): string {
 }
 
 /**
+ * Em RETURN_ON_TEAM_REPLY, quando a equipe escreve por conta própria (o agente
+ * não tinha chamado ninguém), ela está conduzindo a conversa: o agente fica
+ * em silêncio por este tempo (cada mensagem da equipe renova).
+ */
+export const TEAM_CONVERSATION_MINUTES = 60;
+
+/**
  * Campos da conversa quando a equipe assume: prazo, ou sem volta automática.
  * `teamReplied` = a equipe acabou de responder pelo celular (senão, foi o
  * agente que chamou a equipe). Em RETURN_ON_TEAM_REPLY a resposta da equipe
- * devolve a conversa ao agente na hora.
+ * a um chamado (`handoffPending`) devolve a conversa ao agente na hora; sem
+ * chamado, a equipe está conversando e o agente espera TEAM_CONVERSATION_MINUTES.
  */
 export function takeoverPatch(
   nowMs: number,
   minutes: unknown,
   teamReplied = false,
+  handoffPending = true,
 ): { takeover_until: string | null; human_takeover?: boolean } {
   const m = clampTakeoverMinutes(minutes);
   if (m === RETURN_ON_TEAM_REPLY) {
-    return teamReplied
+    if (!teamReplied) return { human_takeover: true, takeover_until: null };
+    return handoffPending
       ? { human_takeover: false, takeover_until: null }
-      : { human_takeover: true, takeover_until: null };
+      : {
+          human_takeover: false,
+          takeover_until: takeoverUntilISO(nowMs, TEAM_CONVERSATION_MINUTES),
+        };
   }
   if (m === NO_AUTO_RETURN) return { human_takeover: true, takeover_until: null };
   return { takeover_until: takeoverUntilISO(nowMs, m) };

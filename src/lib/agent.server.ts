@@ -203,8 +203,14 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
   if (m.key?.fromMe) {
     // Áudio, foto ou arquivo mandado pelo celular também é a equipe respondendo
     // (o agente só envia texto). Reação, apagar e editar não contam.
-    const teamBody = text || mediaLabel(m);
+    let teamBody = text || mediaLabel(m);
     if (!teamBody) return;
+    // Áudio da equipe: transcreve para o agente saber o que já foi dito.
+    const teamAudio = !text ? audioOf(m) : null;
+    if (teamAudio && teamAudio.seconds <= MAX_AUDIO_SECONDS) {
+      const heard = await transcribeAudio(ctx.instance, m.key?.id, teamAudio.mimetype);
+      if (heard) teamBody = `[áudio transcrito] ${heard}`;
+    }
     // Eco de uma resposta do próprio agente (registrada antes do envio).
     const { data: echo } = await admin
       .from("messages")
@@ -226,7 +232,13 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
     await admin
       .from("conversations")
       .update({
-        ...takeoverPatch(Date.now(), settings?.takeover_minutes, true),
+        // Chamado pendente = o agente tinha passado a conversa para a equipe.
+        ...takeoverPatch(
+          Date.now(),
+          settings?.takeover_minutes,
+          true,
+          Boolean(conv.human_takeover),
+        ),
         attention_reason: null,
         last_message_at: now,
       })
