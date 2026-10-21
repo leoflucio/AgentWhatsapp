@@ -167,8 +167,7 @@ export const suggestDataSheets = createServerFn({ method: "POST" })
     }
     const { aiModel } = await import("@/lib/ai.server");
     const { generateText } = await import("ai");
-    // O modelo lite às vezes fica sobrecarregado (503 "Service Unavailable"):
-    // tenta de novo com o modelo principal antes de desistir.
+    // Se o lite falhar (mesmo com o modelo reserva de aiModel), tenta o principal.
     let text: string | null = null;
     let lastError = "";
     for (const kind of ["lite", "main"] as const) {

@@ -14,7 +14,7 @@ bun run lint        # eslint + prettier
 
 ## Stack
 
-TanStack Start (React 19) com build Node (nitro, preset `node-server`) para rodar em VPS com Docker, Supabase (Postgres + Auth), Tailwind 4 + shadcn/ui, AI SDK com provedor compatível com OpenAI (`src/lib/ai.server.ts`, Gemini por padrão), Evolution API para o WhatsApp. Sem Lovable e sem Cloudflare. `src/routeTree.gen.ts` é gerado pelo build.
+TanStack Start (React 19) com build Node (nitro, preset `node-server`) para rodar em VPS com Docker, Supabase (Postgres + Auth), Tailwind 4 + shadcn/ui, AI SDK com provedor compatível com OpenAI (`src/lib/ai.server.ts`, Gemini por padrão; se o Google recusar por demanda — 503/429/5xx — cada chamada vai para `AI_MODEL_FALLBACK`, padrão `gemini-3.6-flash`), Evolution API para o WhatsApp. Sem Lovable e sem Cloudflare. `src/routeTree.gen.ts` é gerado pelo build.
 
 ## Regras
 
