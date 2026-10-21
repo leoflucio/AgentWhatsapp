@@ -50,6 +50,9 @@ function fmtDate(iso: string) {
   });
 }
 
+/** Aba das linhas cuja planilha foi tirada ou nunca foi salva (para nada sumir da tela). */
+const ORPHAN_KEY = "__sem_planilha";
+
 const toDraft = (sheets: DataSheet[]): SheetDraft[] =>
   sheets.map((s) => ({ ...s, fields: s.fields.map((f) => ({ ...f })) }));
 
@@ -69,15 +72,30 @@ function DadosPage() {
     }
   }, [q.data, draft]);
 
-  const sheet = sheets.find((s) => s.key === active) ?? sheets[0] ?? null;
+  // Linhas anotadas numa planilha que não existe mais aparecem numa aba à parte.
+  const viewSheets = useMemo(() => {
+    const known = new Set(sheets.map((s) => s.key));
+    const orphans = (q.data?.rows ?? []).filter((r) => !known.has(r.sheetKey));
+    if (orphans.length === 0) return sheets;
+    const keys = [...new Set(orphans.flatMap((r) => Object.keys(r.data)))];
+    const fields: DataField[] = keys.map((k) => ({ key: k, label: k, ask: false }));
+    return [...sheets, { key: ORPHAN_KEY, name: "Sem planilha", fields }];
+  }, [sheets, q.data]);
+  const known = useMemo(() => new Set(sheets.map((s) => s.key)), [sheets]);
+  const sheetOf = (key: string) => (known.has(key) ? key : ORPHAN_KEY);
+  const sheet = viewSheets.find((s) => s.key === active) ?? viewSheets[0] ?? null;
   const countBy = useMemo(() => {
     const m: Record<string, number> = {};
-    for (const r of q.data?.rows ?? []) m[r.sheetKey] = (m[r.sheetKey] ?? 0) + 1;
+    for (const r of q.data?.rows ?? []) {
+      const k = sheetOf(r.sheetKey);
+      m[k] = (m[k] ?? 0) + 1;
+    }
     return m;
-  }, [q.data]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q.data, known]);
 
   const rows = useMemo(() => {
-    const all = (q.data?.rows ?? []).filter((r) => r.sheetKey === sheet?.key);
+    const all = (q.data?.rows ?? []).filter((r) => sheetOf(r.sheetKey) === sheet?.key);
     const s = search.trim().toLowerCase();
     if (!s) return all;
     const digits = s.replace(/\D/g, "");
@@ -87,7 +105,8 @@ function DadosPage() {
         (digits.length >= 4 && r.phone.includes(digits)) ||
         Object.values(r.data).some((v) => v.toLowerCase().includes(s)),
     );
-  }, [q.data, search, sheet]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q.data, search, sheet, known]);
 
   const suggest = async () => {
     setBusy(true);
@@ -260,7 +279,7 @@ function DadosPage() {
         <Card>
           <CardHeader className="space-y-3">
             <div className="flex gap-1 overflow-x-auto">
-              {sheets.map((s) => (
+              {viewSheets.map((s) => (
                 <button
                   key={s.key}
                   type="button"
@@ -289,7 +308,7 @@ function DadosPage() {
               />
               <Button
                 variant="outline"
-                disabled={sheet.fields.length === 0}
+                disabled={sheet.fields.length === 0 || sheet.key === ORPHAN_KEY}
                 onClick={() =>
                   setRow({ sheetKey: sheet.key, contactName: "", phone: "", data: {} })
                 }
