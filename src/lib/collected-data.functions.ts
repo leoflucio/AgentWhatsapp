@@ -170,6 +170,7 @@ export const suggestDataSheets = createServerFn({ method: "POST" })
     // O modelo lite às vezes fica sobrecarregado (503 "Service Unavailable"):
     // tenta de novo com o modelo principal antes de desistir.
     let text: string | null = null;
+    let lastError = "";
     for (const kind of ["lite", "main"] as const) {
       const model = aiModel(kind);
       if (!model) throw new Error("IA não configurada no servidor.");
@@ -185,11 +186,13 @@ export const suggestDataSheets = createServerFn({ method: "POST" })
         break;
       } catch (e) {
         console.error(`[dados] sugestão de planilhas falhou (${kind}):`, e);
+        const last = (e as { lastError?: unknown })?.lastError ?? e;
+        lastError = (last instanceof Error ? last.message : String(last)).slice(0, 200);
       }
     }
     if (text === null) {
       throw new Error(
-        "A IA do Google está sobrecarregada agora. Tente de novo em alguns minutos ou monte as planilhas à mão.",
+        `A IA não respondeu (${lastError || "sem detalhe"}). Tente de novo em alguns minutos ou monte as planilhas à mão.`,
       );
     }
     return {
