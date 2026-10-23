@@ -13,6 +13,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { getDemoLink } from "@/lib/demo.functions";
+import { DemoChat } from "@/components/DemoChat";
 import { APP_NAME, SUPPORT_EMAIL } from "@/lib/site-info";
 import { PLANS, PLAN_IDS, TRIAL_DAYS, TRIAL_REPLIES } from "@/lib/billing-rules";
 import { PROMPT_TEMPLATES } from "@/lib/prompt-templates";
@@ -130,16 +131,23 @@ function Cta({ light = false }: { light?: boolean }) {
   );
 }
 
-/** Abre a conversa com o número de demonstração (DEMO_WHATSAPP). Sem número, não aparece. */
+/**
+ * Com número de demonstração (DEMO_WHATSAPP), abre a conversa no WhatsApp.
+ * Sem ele, leva ao chat de demonstração da própria página.
+ */
 function DemoButton({ link }: { link: string | null }) {
-  if (!link) return null;
+  const cls =
+    "inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-white/40 px-6 text-base font-semibold text-primary-foreground transition-colors hover:bg-white/10";
+  if (!link) {
+    return (
+      <a href="#demo" className={cls}>
+        <MessageCircle className="size-5" />
+        Conversar com ela agora
+      </a>
+    );
+  }
   return (
-    <a
-      href={link}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-white/40 px-6 text-base font-semibold text-primary-foreground transition-colors hover:bg-white/10"
-    >
+    <a href={link} target="_blank" rel="noopener noreferrer" className={cls}>
       <MessageCircle className="size-5" />
       Ver ela atendendo agora
     </a>
@@ -202,7 +210,7 @@ export function Landing() {
             <p className="mt-3 text-sm text-primary-foreground/80">
               {demoLink
                 ? "Mande um oi e veja a secretária respondendo no seu WhatsApp. Sem cartão para testar."
-                : "Sem cartão. Pronto em poucos minutos."}
+                : "Converse com ela aqui mesmo, sem cadastro. Sem cartão para testar."}
             </p>
           </div>
           <Phone
@@ -210,6 +218,22 @@ export function Landing() {
             alt="Tela de configuração da secretária"
             className="mx-auto w-full max-w-[280px]"
           />
+        </div>
+      </section>
+
+      <section id="demo" className="scroll-mt-16 bg-muted/50 py-16">
+        <div className="mx-auto max-w-6xl px-4 text-center">
+          <h2 className="text-3xl font-bold">Converse com ela agora</h2>
+          <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">
+            Esta é a secretária de um salão de exemplo. Pergunte preço, peça um horário, mande como
+            se fosse um cliente.
+          </p>
+          <div className="mt-10">
+            <DemoChat />
+          </div>
+          <div className="mt-8">
+            <Cta />
+          </div>
         </div>
       </section>
 
