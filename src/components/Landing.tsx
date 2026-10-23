@@ -1,15 +1,18 @@
 import { Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import {
   Bot,
   CalendarCheck,
   Check,
   Clock,
   FileSpreadsheet,
+  MessageCircle,
   Mic,
   QrCode,
   RotateCcw,
   UserRound,
 } from "lucide-react";
+import { getDemoLink } from "@/lib/demo.functions";
 import { APP_NAME, SUPPORT_EMAIL } from "@/lib/site-info";
 import { PLANS, PLAN_IDS, TRIAL_DAYS, TRIAL_REPLIES } from "@/lib/billing-rules";
 import { PROMPT_TEMPLATES } from "@/lib/prompt-templates";
@@ -127,8 +130,30 @@ function Cta({ light = false }: { light?: boolean }) {
   );
 }
 
+/** Abre a conversa com o número de demonstração (DEMO_WHATSAPP). Sem número, não aparece. */
+function DemoButton({ link }: { link: string | null }) {
+  if (!link) return null;
+  return (
+    <a
+      href={link}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-white/40 px-6 text-base font-semibold text-primary-foreground transition-colors hover:bg-white/10"
+    >
+      <MessageCircle className="size-5" />
+      Ver ela atendendo agora
+    </a>
+  );
+}
+
 export function Landing() {
   const segments = PROMPT_TEMPLATES.filter((t) => t.id !== "outro");
+  const demo = useQuery({
+    queryKey: ["demo-link"],
+    queryFn: () => getDemoLink(),
+    staleTime: Infinity,
+  });
+  const demoLink = demo.data?.link ?? null;
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-10 border-b bg-background/90 backdrop-blur">
@@ -172,10 +197,13 @@ export function Landing() {
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-4">
               <Cta light />
-              <span className="text-sm text-primary-foreground/80">
-                Sem cartão. Pronto em poucos minutos.
-              </span>
+              <DemoButton link={demoLink} />
             </div>
+            <p className="mt-3 text-sm text-primary-foreground/80">
+              {demoLink
+                ? "Mande um oi e veja a secretária respondendo no seu WhatsApp. Sem cartão para testar."
+                : "Sem cartão. Pronto em poucos minutos."}
+            </p>
           </div>
           <Phone
             src="/landing/agente.webp"
@@ -332,8 +360,9 @@ export function Landing() {
           <p className="mx-auto mt-3 max-w-xl text-primary-foreground/85">
             Crie sua conta agora e veja a secretária atendendo ainda hoje.
           </p>
-          <div className="mt-8">
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
             <Cta light />
+            <DemoButton link={demoLink} />
           </div>
         </div>
       </section>
