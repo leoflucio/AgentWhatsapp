@@ -26,7 +26,7 @@ export type EvoIncoming = {
     };
     imageMessage?: { caption?: string };
     audioMessage?: { seconds?: number; mimetype?: string; ptt?: boolean };
-    videoMessage?: { caption?: string };
+    videoMessage?: { caption?: string; gifPlayback?: boolean; gifAttribution?: unknown };
     documentMessage?: { caption?: string; fileName?: string; mimetype?: string };
     stickerMessage?: unknown;
     lottieStickerMessage?: unknown;
@@ -87,12 +87,15 @@ export function mediaLabel(m: EvoIncoming): string | null {
 }
 
 /**
- * Figurinha (sticker). Chega no WhatsApp como um arquivo .webp; também vale a
+ * Figurinha (sticker) ou GIF sem legenda. Chega no WhatsApp como um arquivo .webp; também vale a
  * figurinha animada (lottie) e o .webp mandado como documento.
  */
 export function isSticker(m: EvoIncoming): boolean {
   const msg = m.message ?? {};
   if (msg.stickerMessage || msg.lottieStickerMessage) return true;
+  // GIF (GIPHY/Tenor do teclado) chega como vídeo com gifPlayback.
+  const vid = msg.videoMessage;
+  if (vid && (vid.gifPlayback || vid.gifAttribution) && !vid.caption?.trim()) return true;
   if (/sticker/i.test(m.messageType ?? "")) return true;
   const doc = msg.documentMessage;
   return Boolean(doc && /image\/webp/i.test(doc.mimetype ?? "") && !doc.caption);

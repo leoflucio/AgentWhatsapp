@@ -505,6 +505,11 @@ describe("figurinhas e reações do contato", () => {
     );
     expect(isIgnorableIncoming({ message: { protocolMessage: {} } } as never)).toBe(true);
     expect(isIgnorableIncoming({ message: {} })).toBe(true);
+    expect(isIgnorableIncoming({ message: { videoMessage: { gifPlayback: true } } })).toBe(true);
+    expect(
+      isIgnorableIncoming({ message: { videoMessage: { gifPlayback: true, caption: "olha" } } }),
+    ).toBe(false);
+    expect(isIgnorableIncoming({ message: { videoMessage: {} } })).toBe(false);
   });
 
   it("não ignora texto, foto, arquivo e áudio", async () => {
