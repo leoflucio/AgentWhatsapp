@@ -490,3 +490,43 @@ describe("mídia mandada pela equipe", () => {
     expect(mediaLabel({ message: { reactionMessage: { text: "👍" } } } as never)).toBeNull();
   });
 });
+
+describe("figurinhas e reações do contato", () => {
+  it("ignora figurinha, reação e tipos sem conteúdo", async () => {
+    const { isIgnorableIncoming, isSticker } = await import("./whatsapp-agent-rules");
+    expect(isIgnorableIncoming({ message: { stickerMessage: {} } })).toBe(true);
+    expect(isIgnorableIncoming({ message: { lottieStickerMessage: {} } })).toBe(true);
+    expect(isIgnorableIncoming({ messageType: "stickerMessage", message: {} })).toBe(true);
+    expect(
+      isSticker({ message: { documentMessage: { mimetype: "image/webp", fileName: "x.webp" } } }),
+    ).toBe(true);
+    expect(isIgnorableIncoming({ message: { reactionMessage: { text: "👍" } } } as never)).toBe(
+      true,
+    );
+    expect(isIgnorableIncoming({ message: { protocolMessage: {} } } as never)).toBe(true);
+    expect(isIgnorableIncoming({ message: {} })).toBe(true);
+  });
+
+  it("não ignora texto, foto, arquivo e áudio", async () => {
+    const { isIgnorableIncoming } = await import("./whatsapp-agent-rules");
+    expect(isIgnorableIncoming({ message: { conversation: "oi" } })).toBe(false);
+    expect(isIgnorableIncoming({ message: { imageMessage: {} } })).toBe(false);
+    expect(
+      isIgnorableIncoming({
+        message: { documentMessage: { fileName: "a.pdf", mimetype: "application/pdf" } },
+      }),
+    ).toBe(false);
+    expect(isIgnorableIncoming({ message: { audioMessage: { seconds: 5 } } })).toBe(false);
+  });
+
+  it("aviso de mídia diz o tipo certo", async () => {
+    const { contactMediaNote, mediaLabel } = await import("./whatsapp-agent-rules");
+    expect(contactMediaNote({ message: { imageMessage: {} } })).toBe(
+      "(o contato enviou uma foto, sem texto)",
+    );
+    expect(contactMediaNote({ message: { documentMessage: { fileName: "rg.pdf" } } })).toBe(
+      '(o contato enviou o arquivo "rg.pdf", sem texto)',
+    );
+    expect(mediaLabel({ message: { stickerMessage: {} } })).toBe("(figurinha)");
+  });
+});

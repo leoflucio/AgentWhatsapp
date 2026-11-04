@@ -16,6 +16,8 @@ export type EvoIncoming = {
   };
   pushName?: string;
   senderPn?: string;
+  /** Tipo informado pela Evolution ("conversation", "stickerMessage", "reactionMessage"...). */
+  messageType?: string;
   message?: {
     conversation?: string;
     extendedTextMessage?: {
@@ -25,8 +27,9 @@ export type EvoIncoming = {
     imageMessage?: { caption?: string };
     audioMessage?: { seconds?: number; mimetype?: string; ptt?: boolean };
     videoMessage?: { caption?: string };
-    documentMessage?: { caption?: string; fileName?: string };
+    documentMessage?: { caption?: string; fileName?: string; mimetype?: string };
     stickerMessage?: unknown;
+    lottieStickerMessage?: unknown;
     buttonsResponseMessage?: { selectedDisplayText?: string };
     listResponseMessage?: { title?: string };
   };
@@ -75,12 +78,50 @@ export function textOf(m: EvoIncoming): string {
  */
 export function mediaLabel(m: EvoIncoming): string | null {
   const msg = m.message ?? {};
+  if (isSticker(m)) return "(figurinha)";
   if (msg.audioMessage) return "(mensagem de voz)";
   if (msg.imageMessage) return "(foto)";
   if (msg.videoMessage) return "(vídeo)";
   if (msg.documentMessage) return "(arquivo)";
-  if (msg.stickerMessage) return "(figurinha)";
   return null;
+}
+
+/**
+ * Figurinha (sticker). Chega no WhatsApp como um arquivo .webp; também vale a
+ * figurinha animada (lottie) e o .webp mandado como documento.
+ */
+export function isSticker(m: EvoIncoming): boolean {
+  const msg = m.message ?? {};
+  if (msg.stickerMessage || msg.lottieStickerMessage) return true;
+  if (/sticker/i.test(m.messageType ?? "")) return true;
+  const doc = msg.documentMessage;
+  return Boolean(doc && /image\/webp/i.test(doc.mimetype ?? "") && !doc.caption);
+}
+
+/**
+ * Mensagem do contato que o agente ignora (não grava nem responde): figurinha,
+ * reação (👍 em cima de uma mensagem), apagar, editar, voto em enquete ou
+ * qualquer tipo sem texto e sem mídia. Antes, tudo isso virava "o contato
+ * enviou um arquivo" e o agente dizia que recebeu um arquivo que não existe.
+ */
+export function isIgnorableIncoming(m: EvoIncoming): boolean {
+  if (isSticker(m)) return true;
+  if (textOf(m)) return false;
+  return mediaLabel(m) === null;
+}
+
+/** Aviso para a IA quando o contato manda mídia sem texto (ela não vê o conteúdo). */
+export function contactMediaNote(m: EvoIncoming): string {
+  const msg = m.message ?? {};
+  if (msg.imageMessage) return "(o contato enviou uma foto, sem texto)";
+  if (msg.videoMessage) return "(o contato enviou um vídeo, sem texto)";
+  if (msg.documentMessage) {
+    const name = String(msg.documentMessage.fileName ?? "").trim();
+    return name
+      ? `(o contato enviou o arquivo "${name.slice(0, 80)}", sem texto)`
+      : "(o contato enviou um arquivo, sem texto)";
+  }
+  return "(o contato enviou uma mídia, sem texto)";
 }
 
 /** Áudio recebido (mensagem de voz ou arquivo de áudio) e a duração em segundos. */
@@ -156,6 +197,7 @@ export const FIXED_RULES = [
   "Nunca invente preço, prazo, produto, serviço, endereço, horário de funcionamento ou condição que não esteja nas INSTRUÇÕES DO NEGÓCIO. Se a informação não estiver lá, diga que vai confirmar com a equipe e use chamar_atendente.",
   "Se pedirem para falar com uma pessoa, reclamarem, ou se você não souber responder: use chamar_atendente.",
   "Nunca fale de outros clientes nem de dados de outras pessoas.",
+  "Você não vê fotos, vídeos nem arquivos. Só diga que recebeu um arquivo, foto ou vídeo quando a ÚLTIMA mensagem do contato for um aviso como '(o contato enviou uma foto, sem texto)'; nunca diga isso em outro caso, nunca invente que recebeu algo e não peça arquivo que a pessoa não ofereceu. Se ela disser que não mandou nada, peça desculpas em uma frase e siga o assunto. Figurinhas e reações não são arquivos: ignore.",
   "Mensagens que começam com [áudio transcrito] foram enviadas por áudio: responda normalmente, por texto. Se o trecho estiver confuso ou incompleto, peça com gentileza para a pessoa repetir ou escrever.",
   "Fale SOMENTE sobre o negócio: produtos, serviços, dúvidas sobre como funcionam, valores, formas de pagamento, endereço, horários e atendimento. Não responda nem opine sobre assuntos CLARAMENTE sem relação com o negócio (política, religião, futebol, notícias, outras empresas, piadas, pedidos de texto, tarefas etc.). Nesses casos, diga em uma frase que só pode ajudar com o atendimento e volte ao assunto.",
   "Recados e assuntos de quem já é cliente NÃO são fora do assunto: mensagem dirigida a alguém da equipe pelo nome, pedidos ou horários já feitos, troca, cancelamento, atraso, pagamento, entrega, familiares e qualquer mensagem confusa sobre o atendimento. Nesses casos, se não souber resolver pelas instruções, responda que vai passar a mensagem para a equipe e use chamar_atendente.",

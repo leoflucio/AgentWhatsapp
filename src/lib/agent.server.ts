@@ -45,6 +45,8 @@ import {
   BURST_WAIT_MS,
   isGroupOrBroadcast,
   mediaLabel,
+  isIgnorableIncoming,
+  contactMediaNote,
   onlyAcknowledgments,
   sequentialOffer,
   unverifiedOffer,
@@ -166,6 +168,10 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
   const accountId = ctx.account.id;
   const now = new Date().toISOString();
   const text = textOf(m);
+  // Figurinha, reação, apagar/editar e tipos sem conteúdo vindos do contato: o
+  // agente ignora (não grava nem responde). Antes viravam "o contato enviou um
+  // arquivo" e ele dizia ter recebido um arquivo que não existe.
+  if (!m.key?.fromMe && isIgnorableIncoming(m)) return;
 
   // Conversa (memória) desta pessoa.
   const { data: existing } = await admin
@@ -260,7 +266,7 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
         ? "(o contato enviou um áudio longo; peça um resumo por escrito)"
         : "(o contato enviou um áudio que não foi possível ouvir; peça para escrever)";
   }
-  body = body || "(o contato enviou foto, vídeo ou arquivo, sem texto)";
+  body = body || contactMediaNote(m);
   const { data: mine, error: dup } = await admin
     .from("messages")
     .insert({
