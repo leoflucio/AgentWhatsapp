@@ -34,6 +34,13 @@ import {
 import { listFreeSlots, scheduleOf } from "@/lib/agenda.server";
 import { sendText, transcribeAudio } from "@/lib/evolution.server";
 import {
+  DOC_RELAY_RULE,
+  analysisBody,
+  canRequestAnalysis,
+  pdfOf,
+  unreadableBody,
+} from "@/lib/document-rules";
+import {
   AGENT_BOOKED_NOTE,
   buildSystemPrompt,
   cameFromAd,
@@ -257,6 +264,34 @@ async function handleAiFailure(
   }).catch((e: unknown) => console.error("[agente] aviso de IA fora do ar", e));
 }
 
+/**
+ * Lê este PDF? Leitura ligada na tela Documentos, agente ligado, número
+ * autorizado (lista vazia = qualquer um), em modo teste só os testadores, e
+ * não é o reenvio do mesmo evento (a análise custa uma chamada de IA).
+ */
+async function shouldAnalyzePdf(
+  admin: any,
+  settings: any,
+  phone: string,
+  messageId: string | undefined,
+): Promise<boolean> {
+  if (!settings?.enabled || !settings?.doc_enabled) return false;
+  if (!canRequestAnalysis((settings.doc_numbers ?? []) as string[], phone)) return false;
+  if (settings.test_mode !== false) {
+    const testers = (settings.test_numbers ?? []) as string[];
+    if (!testers.some((n) => samePhoneBR(n, phone))) return false;
+  }
+  if (messageId) {
+    const { data } = await admin
+      .from("messages")
+      .select("id")
+      .eq("wa_message_id", messageId)
+      .limit(1);
+    if ((data ?? []).length > 0) return false;
+  }
+  return true;
+}
+
 async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
   if (isGroupOrBroadcast(m.key?.remoteJid)) return;
   const phone = phoneOf(m);
@@ -394,6 +429,27 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
         ? "(o contato enviou um áudio longo; peça um resumo por escrito)"
         : "(o contato enviou um áudio que não foi possível ouvir; peça para escrever)";
   }
+  // PDF (ex.: declaração de imposto de renda) com a leitura de documentos
+  // ligada (tela Documentos): o agente lê e analisa com os critérios do
+  // negócio; o resultado entra na conversa como parte da mensagem da pessoa.
+  const pdf = pdfOf(m);
+  let docResult: { result: string; pages: number | null; fileName: string } | null = null;
+  if (pdf && (await shouldAnalyzePdf(admin, settings, phone, m.key?.id))) {
+    const { analyzePdf } = await import("@/lib/document.server");
+    const r = await analyzePdf({
+      instance: ctx.instance,
+      messageId: m.key?.id,
+      fileName: pdf.fileName,
+      caption: pdf.caption,
+      instructions: String(settings?.doc_instructions ?? ""),
+    });
+    if (r.ok) {
+      docResult = { result: r.result, pages: r.pages, fileName: pdf.fileName };
+      body = analysisBody(pdf.fileName, pdf.caption, r.result);
+    } else {
+      body = unreadableBody(pdf.fileName, pdf.caption, r.reason === "grande");
+    }
+  }
   body = body || contactMediaNote(m);
   const { data: mine, error: dup } = await admin
     .from("messages")
@@ -407,6 +463,18 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
     .select("id, created_at")
     .single();
   if (dup || !mine) return; // reenvio do mesmo evento
+  if (docResult) {
+    const { error: docErr } = await admin.from("document_analyses").insert({
+      account_id: accountId,
+      conversation_id: conv.id,
+      phone,
+      contact_name: conv.contact_name ?? m.pushName ?? null,
+      file_name: docResult.fileName,
+      pages: docResult.pages,
+      result: docResult.result,
+    });
+    if (docErr) console.error("[agente] análise do documento não gravada", docErr.message);
+  }
   await admin
     .from("conversations")
     .update({
@@ -801,7 +869,9 @@ async function generateAgentReply(
     sequentialFill: sequential,
     autoConfirm,
   });
-  const system = args.note ? `${basePrompt}\n\n${args.note}` : basePrompt;
+  const system = [basePrompt, settings?.doc_enabled ? DOC_RELAY_RULE : "", args.note ?? ""]
+    .filter(Boolean)
+    .join("\n\n");
 
   const dataField = z
     .string()
