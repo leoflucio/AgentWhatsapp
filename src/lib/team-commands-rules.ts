@@ -11,6 +11,7 @@
  */
 import { phoneMatchKey, samePhoneBR } from "@/lib/phone";
 import { addDaysISO, localDateTimeOf } from "@/lib/agenda-time";
+import { FUZZY_MIN, nameScore } from "@/lib/name-match";
 
 /** Quanto tempo um plano espera o "sim" e uma lista aceita a resposta com números. */
 export const PENDING_MINUTES = 30;
@@ -102,17 +103,53 @@ export function isNo(text: string): boolean {
   return NO.has(fold(text).replace(/#/g, "").trim());
 }
 
-/** Dia pedido por #hoje / #amanhã / #agenda DD/MM. null = não é pedido de lista. */
-export function listDayOf(text: string, todayISO: string): string | null {
-  const t = fold(text);
-  const m = /^#\s*(hoje|amanha|agenda|lista)\b\s*(.*)$/.exec(t);
-  if (!m) return null;
-  const rest = m[2]!.trim();
-  if (m[1] === "hoje") return rest ? null : todayISO;
-  if (m[1] === "amanha") return rest ? null : addDaysISO(todayISO, 1);
-  if (!rest || rest === "hoje") return todayISO;
-  if (rest === "amanha") return addDaysISO(todayISO, 1);
-  const d = /^(\d{1,2})[/\s.-](\d{1,2})(?:[/\s.-](\d{2,4}))?$/.exec(rest);
+const WEEKDAY_NUM: Record<string, number> = {
+  domingo: 0,
+  dom: 0,
+  segunda: 1,
+  seg: 1,
+  terca: 2,
+  ter: 2,
+  quarta: 3,
+  qua: 3,
+  quinta: 4,
+  qui: 4,
+  sexta: 5,
+  sex: 5,
+  sabado: 6,
+  sab: 6,
+};
+
+/**
+ * Dia dito de vários jeitos: "hoje", "amanhã", "ontem", "depois de amanhã",
+ * "sexta" (a próxima; hoje conta), "dia 20" (este mês, ou o próximo se já
+ * passou), "20/11", "20-11-2026". null = não entendeu.
+ */
+export function parseDayWords(raw: string, todayISO: string): string | null {
+  const t = fold(raw)
+    .replace(/\b(feira|proxima|proximo|que vem|de)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!t || t === "hoje") return todayISO;
+  if (t === "amanha") return addDaysISO(todayISO, 1);
+  if (t === "ontem") return addDaysISO(todayISO, -1);
+  if (t === "depois amanha") return addDaysISO(todayISO, 2);
+  if (t in WEEKDAY_NUM) {
+    const today = new Date(`${todayISO}T12:00:00Z`).getUTCDay();
+    return addDaysISO(todayISO, (WEEKDAY_NUM[t]! - today + 7) % 7);
+  }
+  const only = /^(?:dia )?(\d{1,2})$/.exec(t);
+  if (only) {
+    const [y, m] = todayISO.split("-").map(Number);
+    const day = String(Number(only[1])).padStart(2, "0");
+    const iso = `${y}-${String(m).padStart(2, "0")}-${day}`;
+    if (isValidDate(iso) && iso >= todayISO) return iso;
+    const ny = m === 12 ? y! + 1 : y!;
+    const nm = m === 12 ? 1 : m! + 1;
+    const next = `${ny}-${String(nm).padStart(2, "0")}-${day}`;
+    return isValidDate(next) ? next : null;
+  }
+  const d = /^(?:dia )?(\d{1,2})[/\s.-](\d{1,2})(?:[/\s.-](\d{2,4}))?$/.exec(t);
   if (!d) return null;
   const year = d[3]
     ? d[3].length === 2
@@ -121,6 +158,25 @@ export function listDayOf(text: string, todayISO: string): string | null {
     : Number(todayISO.slice(0, 4));
   const iso = `${year}-${String(Number(d[2])).padStart(2, "0")}-${String(Number(d[1])).padStart(2, "0")}`;
   return isValidDate(iso) ? iso : null;
+}
+
+/**
+ * Dia pedido por #hoje, #amanhã, #ontem, #sexta, #agenda DD/MM, #agenda dia 20,
+ * #agenda depois de amanhã. null = não é pedido de lista.
+ */
+export function listDayOf(text: string, todayISO: string): string | null {
+  const t = fold(text);
+  const m = /^#\s*(hoje|amanha|ontem|agenda|lista)\b\s*(.*)$/.exec(t);
+  if (!m) {
+    // "#sexta", "#segunda feira" sozinhos.
+    const w = /^#\s*(domingo|segunda|terca|quarta|quinta|sexta|sabado)(\s+feira)?$/.exec(t);
+    return w ? parseDayWords(w[1]!, todayISO) : null;
+  }
+  const rest = m[2]!.trim();
+  if (m[1] === "hoje" || m[1] === "amanha" || m[1] === "ontem") {
+    return rest ? null : parseDayWords(m[1], todayISO);
+  }
+  return parseDayWords(rest, todayISO);
 }
 
 export function isValidDate(iso: string): boolean {
@@ -200,8 +256,8 @@ export function listText(list: TeamBooking[], dateISO: string, todayISO: string)
 /** Ajuda curta quando o comando não foi entendido. */
 export const TEAM_HELP = [
   "Comandos da agenda (texto com # ou áudio):",
-  "#hoje ou #amanhã: lista os horários para confirmar",
-  "#confirmar Ana",
+  "#hoje, #amanhã, #sexta ou #agenda 20/11: lista os horários para confirmar",
+  "#confirmar Ana (nome escrito de outro jeito também vale: Walkyria = Valquíria)",
   "#cancelar Ana",
   "#remarcar Ana sexta 15h",
   "#agendar Ana amanhã 10h (pode pôr o celular)",
@@ -214,6 +270,10 @@ export function interpretSystem(args: {
   nowHour: string;
   calendar: string;
   bookings: TeamBooking[];
+  /** Nomes da agenda que o comando parece citar pelo som (mentionedNames). */
+  hints?: string[];
+  /** Contatos da lista que o comando parece citar (nome | celular), para agendar. */
+  contacts?: string[];
 }): string {
   const rows = args.bookings
     .filter((b) => b.kind === "reserva" && b.status !== "cancelado")
@@ -230,17 +290,28 @@ export function interpretSystem(args: {
     "",
     "HORÁRIOS MARCADOS (id | data hora | nome | celular | status):",
     rows.length ? rows.join("\n") : "(nenhum)",
+    ...(args.hints?.length
+      ? ["", `PELO SOM, O COMANDO PARECE CITAR: ${args.hints.join("; ")}.`]
+      : []),
+    ...(args.contacts?.length
+      ? ["", "CONTATOS DA LISTA COM NOME PARECIDO (nome | celular):", ...args.contacts]
+      : []),
     "",
     "Responda SÓ com um JSON, sem texto antes ou depois:",
     '{"acoes":[...],"duvida":"..."}',
     "Cada ação é uma destas:",
-    '{"tipo":"confirmar","id":"<id>"}',
-    '{"tipo":"cancelar","id":"<id>"}',
-    '{"tipo":"remarcar","id":"<id>","data":"AAAA-MM-DD","hora":"HH:MM"}',
+    '{"tipo":"confirmar","id":"<id>","nome":"<nome como foi dito>"}',
+    '{"tipo":"cancelar","id":"<id>","nome":"<nome como foi dito>"}',
+    '{"tipo":"remarcar","id":"<id>","nome":"<nome como foi dito>","data":"AAAA-MM-DD","hora":"HH:MM"}',
     '{"tipo":"agendar","data":"AAAA-MM-DD","hora":"HH:MM","nome":"<nome>","telefone":"<só dígitos ou vazio>"}',
     "Regras:",
     "- Use só ids da lista. A pessoa citada pelo nome precisa bater com UM horário; se houver mais de um com o mesmo nome e o comando não disser qual (dia ou hora), não invente: deixe acoes vazio e escreva em duvida a pergunta.",
-    "- Nome parecido (erro de transcrição: Sueli/Suely) vale se só houver uma pessoa parecida.",
+    '- Compare nomes pelo SOM, não pela grafia: W = V, Y = I, K = QU = C (antes de a/o/u), PH = F, Z = S, Ç = S, H mudo, letras dobradas e acentos não contam (Valkyria = Walkyria = Valquíria; Sueli = Suely; Thaís = Tais; Luiz = Luis; Rafaella = Rafaela; Phelipe = Felipe; Kátia = Cátia). Erro de digitação ou de transcrição (uma letra trocada, "R. Lucy" = Erluce) vale se só houver UMA pessoa parecida.',
+    '- Primeiro nome sozinho vale se só uma pessoa na lista tem esse nome; "Ana" não é "Mariana". Se duas pessoas servem (duas Anas, Sueli e Suely em dias diferentes), não escolha: pergunte em duvida citando as opções com dia e hora.',
+    '- Vários nomes no mesmo comando ("confirma Ana e Bia", "Ana, Bia e Carla") = uma ação para cada.',
+    '- Hora dita de vários jeitos: "3 da tarde" = 15:00, "9 e meia" = 09:30, "meio-dia" = 12:00, "15h30" = 15:30, "às 7 da noite" = 19:00. Hora sem manhã/tarde: use a que existir na agenda daquela pessoa; para agendar, entre 1 e 6 sem período é da tarde ("às 3" = 15:00).',
+    '- Dia dito de vários jeitos: "sexta" = a próxima sexta do CALENDÁRIO (hoje conta), "dia 20" = dia 20 deste mês (ou do próximo, se já passou), "depois de amanhã", "semana que vem" + dia da semana = a da semana seguinte.',
+    "- Para agendar, se a pessoa estiver em CONTATOS DA LISTA, use o nome e o celular de lá.",
     "- Remarcar e agendar precisam de dia e hora; sem um deles, acoes vazio e pergunte em duvida.",
     '- "faltou" ou "não vem" = cancelar. "veio", "confirmou", "confirmado" = confirmar.',
     "- Se a mensagem não for comando de agenda, devolva acoes vazio e duvida vazia.",
@@ -272,6 +343,12 @@ export function parseInterpretation(
       const b = byId.get(id);
       if (!b || b.kind !== "reserva" || b.status === "cancelado") {
         problems.push("não achei esse horário na agenda");
+        continue;
+      }
+      // O nome dito precisa parecer o da agenda (pelo som): a IA não troca de pessoa.
+      const said = String(x.nome ?? "").trim();
+      if (said && b.contact_name?.trim() && nameScore(said, b.contact_name) < FUZZY_MIN) {
+        problems.push(`"${said.slice(0, 60)}" não parece ${who(b)} (${whenText(b.starts_at)})`);
         continue;
       }
       if (tipo === "remarcar") {

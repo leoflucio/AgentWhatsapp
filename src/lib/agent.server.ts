@@ -8,6 +8,7 @@
  * horários livres e RESERVA (não marca): a reserva aparece na agenda para a
  * equipe confirmar.
  */
+import { sameFullName } from "@/lib/name-match";
 import { generateText, stepCountIs, tool, type ToolSet } from "ai";
 import { aiModel } from "@/lib/ai.server";
 import { z } from "zod";
@@ -791,8 +792,14 @@ async function generateAgentReply(
     .gte("starts_at", new Date().toISOString())
     .order("starts_at", { ascending: true })
     .limit(200);
+  // Também o horário que a equipe marcou só com o nome (sem celular), quando o nome
+  // completo é o desta pessoa pelo som (Walkyria Sousa = Valquíria Souza).
+  const nameForBookings = listed?.name || conv.contact_name;
   const mineRows = ((upcoming ?? []) as any[]).filter(
-    (b) => b.conversation_id === conv.id || (b.phone && samePhoneBR(b.phone, phone)),
+    (b) =>
+      b.conversation_id === conv.id ||
+      (b.phone && samePhoneBR(b.phone, phone)) ||
+      (!b.phone && !b.conversation_id && sameFullName(b.contact_name, nameForBookings)),
   );
   // O que o agente pode trocar ou desmarcar: reservas e, com "agendar direto",
   // os horários que ele mesmo marcou. Horário marcado ou confirmado pela equipe, não.

@@ -40,7 +40,24 @@ export const listContacts = createServerFn({ method: "POST" })
     }
     const { data: rows, count, error } = await q;
     if (error) throw new Error(error.message);
-    return { rows: (rows ?? []) as ContactRow[], total: count ?? 0 };
+    const found = (rows ?? []) as ContactRow[];
+    // Busca pelo som: "Walkyria" acha "Valquíria", "Suely" acha "Sueli".
+    if (s && s.replace(/\D/g, "").length < 4 && found.length < PAGE) {
+      const { nameMatches } = await import("@/lib/name-match");
+      const { data: all } = await admin
+        .from("contacts")
+        .select("id, name, phone, notes, is_client")
+        .eq("account_id", account.id)
+        .order("name", { ascending: true })
+        .limit(5000);
+      const seen = new Set(found.map((r) => r.id));
+      const extra = ((all ?? []) as ContactRow[]).filter(
+        (r) => !seen.has(r.id) && nameMatches(s, r.name),
+      );
+      const merged = [...found, ...extra].slice(0, PAGE);
+      return { rows: merged, total: (count ?? 0) + extra.length };
+    }
+    return { rows: found, total: count ?? 0 };
   });
 
 export const saveContact = createServerFn({ method: "POST" })

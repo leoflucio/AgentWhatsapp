@@ -154,3 +154,53 @@ describe("ocupação", () => {
     expect(occupancy([block], s, s + 3600_000).blocked).toBe(true);
   });
 });
+
+describe("datas ditas de vários jeitos", () => {
+  // 14/11/2026 é sábado.
+  it("lista por dia da semana, ontem e dia N", async () => {
+    const { listDayOf, parseDayWords } = await import("@/lib/team-commands-rules");
+    expect(listDayOf("#ontem", "2026-11-14")).toBe("2026-11-13");
+    expect(listDayOf("#sexta", "2026-11-14")).toBe("2026-11-20");
+    expect(listDayOf("#sábado", "2026-11-14")).toBe("2026-11-14");
+    expect(listDayOf("#agenda segunda-feira", "2026-11-14")).toBe("2026-11-16");
+    expect(listDayOf("#agenda dia 20", "2026-11-14")).toBe("2026-11-20");
+    expect(listDayOf("#agenda dia 3", "2026-11-14")).toBe("2026-12-03");
+    expect(listDayOf("#agenda depois de amanhã", "2026-11-14")).toBe("2026-11-16");
+    expect(parseDayWords("20-11-26", "2026-11-14")).toBe("2026-11-20");
+    expect(parseDayWords("banana", "2026-11-14")).toBeNull();
+  });
+});
+
+describe("nome dito confere com a agenda", () => {
+  const b = {
+    id: "b1",
+    kind: "reserva",
+    status: "reservado",
+    contact_name: "Valquíria Souza",
+    phone: null,
+    starts_at: "2026-11-20T13:00:00Z",
+    ends_at: "2026-11-20T14:00:00Z",
+  };
+  it("aceita grafia diferente e recusa outra pessoa", async () => {
+    const { parseInterpretation, interpretSystem } = await import("@/lib/team-commands-rules");
+    const ok = parseInterpretation('{"acoes":[{"tipo":"confirmar","id":"b1","nome":"Walkyria"}]}', [
+      b,
+    ]);
+    expect(ok.actions).toHaveLength(1);
+    const bad = parseInterpretation('{"acoes":[{"tipo":"cancelar","id":"b1","nome":"Roberto"}]}', [
+      b,
+    ]);
+    expect(bad.actions).toHaveLength(0);
+    expect(bad.problems[0]).toContain("não parece Valquíria Souza");
+    const sys = interpretSystem({
+      todayISO: "2026-11-14",
+      nowHour: "10:00",
+      calendar: "",
+      bookings: [b],
+      hints: ["Valquíria Souza"],
+      contacts: ["Walkyria Sousa | 5511999998888"],
+    });
+    expect(sys).toContain("PELO SOM, O COMANDO PARECE CITAR: Valquíria Souza");
+    expect(sys).toContain("Walkyria Sousa | 5511999998888");
+  });
+});
