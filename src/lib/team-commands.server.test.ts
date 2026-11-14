@@ -188,6 +188,35 @@ describe("comandos da equipe (fluxo)", () => {
     expect(db.bookings[0].status).toBe("confirmado");
   });
 
+  it("nome escrito de outro jeito: a IA recebe a dica pelo som e o contato da lista", async () => {
+    db.bookings[0].contact_name = "Valquíria Souza";
+    db.contacts = [
+      { account_id: "acc", name: "Walkyria Sousa", phone: "5511988887777" },
+      { account_id: "acc", name: "Roberto Dias", phone: "5511977776666" },
+    ];
+    const f = vi.fn(async (_url: string, _init: any) =>
+      reply('{"acoes":[{"tipo":"confirmar","id":"b1","nome":"Walkyria"}]}'),
+    );
+    vi.stubGlobal("fetch", f);
+    await run("#confirmar Walkyria");
+    const body = JSON.parse(f.mock.calls[0]![1].body);
+    const system = JSON.stringify(body.messages);
+    expect(system).toContain("PELO SOM, O COMANDO PARECE CITAR: Valquíria Souza");
+    expect(system).toContain("Walkyria Sousa | 5511988887777");
+    expect(system).not.toContain("Roberto");
+    expect(sent.at(-1)).toContain("Confirmar Valquíria Souza");
+  });
+
+  it("a IA não troca de pessoa: nome dito diferente do horário é recusado", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => reply('{"acoes":[{"tipo":"cancelar","id":"b2","nome":"Roberto"}]}')),
+    );
+    await run("#cancelar Roberto");
+    expect(sent.at(-1)).toContain("não parece Bia");
+    expect(db.bookings[1].status).toBe("confirmado");
+  });
+
   it("mensagem da equipe sem # fica sem resposta", async () => {
     const f = vi.fn();
     vi.stubGlobal("fetch", f);

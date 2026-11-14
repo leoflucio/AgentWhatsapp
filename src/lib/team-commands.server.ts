@@ -17,6 +17,7 @@ import {
   todayLocalISO,
 } from "@/lib/agenda-time";
 import { normalizeWhatsApp } from "@/lib/phone";
+import { mentionedNames } from "@/lib/name-match";
 import {
   LIST_MINUTES,
   PENDING_MINUTES,
@@ -171,6 +172,12 @@ export async function handleTeamMessage(
   );
   const model = aiModel("main");
   if (!model) return;
+  // Ajuda a IA a ligar "Walkyria" a "Valquíria": nomes que o comando cita pelo som.
+  const hints = mentionedNames(
+    text,
+    bookings.filter((b) => b.kind === "reserva").map((b) => b.contact_name ?? ""),
+  );
+  const contacts = await similarContacts(admin, accountId, text);
   let raw = "";
   try {
     const r = await generateText({
@@ -180,6 +187,8 @@ export async function handleTeamMessage(
         nowHour: localDateTimeOf(new Date().toISOString()).hora,
         calendar: calendarText(today, 21),
         bookings,
+        hints,
+        contacts,
       }),
       prompt: text.slice(0, 1000),
       temperature: 0,
@@ -211,6 +220,28 @@ export async function handleTeamMessage(
   await reply(
     problems.length ? `Não consegui: ${problems.join("; ")}.\n\n${TEAM_HELP}` : TEAM_HELP,
   );
+}
+
+/** Contatos da lista (tela Contatos) que o comando parece citar: "nome | celular". */
+async function similarContacts(admin: any, accountId: string, text: string): Promise<string[]> {
+  const { data, error } = await admin
+    .from("contacts")
+    .select("name, phone")
+    .eq("account_id", accountId)
+    .limit(5000);
+  if (error || !data?.length) return [];
+  const rows = (data as { name: string | null; phone: string | null }[]).filter(
+    (c) => c.name?.trim() && c.phone,
+  );
+  const names = mentionedNames(
+    text,
+    rows.map((c) => c.name!),
+  );
+  const wanted = new Set(names);
+  return rows
+    .filter((c) => wanted.has(c.name!))
+    .slice(0, 15)
+    .map((c) => `${c.name!.trim()} | ${c.phone}`);
 }
 
 /** Horários (não cancelados) entre duas datas locais. */
