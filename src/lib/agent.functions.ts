@@ -33,6 +33,7 @@ export const getAgentSettings = createServerFn({ method: "POST" })
       enabled: Boolean(data?.enabled),
       testMode: data?.test_mode !== false,
       testNumbers: ((data?.test_numbers ?? []) as string[]).join("\n"),
+      teamNumbers: ((data?.team_numbers ?? []) as string[]).join("\n"),
       agentName: (data?.agent_name as string | null) ?? "",
       segment: (data?.segment as string | null) ?? "",
       bookingEnabled: data?.booking_enabled !== false,
@@ -60,6 +61,7 @@ export const saveAgentSettings = createServerFn({ method: "POST" })
         enabled: z.boolean(),
         testMode: z.boolean(),
         testNumbers: z.string().max(2000),
+        teamNumbers: z.string().max(2000),
         agentName: z.string().trim().max(60),
         segment: z.string().trim().max(120),
         bookingEnabled: z.boolean(),
@@ -131,6 +133,20 @@ export const saveAgentSettings = createServerFn({ method: "POST" })
       { onConflict: "account_id" },
     );
     if (error) throw new Error(error.message);
+
+    // Celulares da equipe (comandos da agenda pelo WhatsApp). Gravado à parte:
+    // sem a migration dos comandos, o resto das configurações salva igual.
+    const { parseTeamNumbers } = await import("@/lib/team-commands-rules");
+    const team = parseTeamNumbers(data.teamNumbers);
+    const { error: teamErr } = await admin
+      .from("agent_settings")
+      .update({ team_numbers: team })
+      .eq("account_id", account.id);
+    if (teamErr && team.length > 0) {
+      throw new Error(
+        "Rode a migration dos comandos da equipe no Supabase para salvar os celulares da equipe.",
+      );
+    }
 
     // O novo prazo vale também para as conversas que já estão com a equipe:
     // nenhuma fica presa além de "agora + prazo" (as assumidas pelo botão não mudam).
