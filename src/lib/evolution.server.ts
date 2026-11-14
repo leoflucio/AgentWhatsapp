@@ -93,6 +93,20 @@ export async function sendText(args: {
  * Baixa o áudio da mensagem e transcreve com o Whisper (Groq). Devolve o
  * texto ou null se não der para ouvir.
  */
+/** Arquivo de uma mensagem recebida (áudio, PDF...), em base64. null = não deu para baixar. */
+export async function downloadMedia(
+  instance: string,
+  messageId: string | undefined,
+): Promise<string | null> {
+  if (!hostConfigured() || !messageId) return null;
+  const media = await evo(`/chat/getBase64FromMediaMessage/${encodeURIComponent(instance)}`, {
+    method: "POST",
+    body: { message: { key: { id: messageId } }, convertToMp4: false },
+  });
+  const base64 = (media.json as { base64?: string } | null)?.base64;
+  return media.ok && base64 ? base64 : null;
+}
+
 export async function transcribeAudio(
   instance: string,
   messageId: string | undefined,
@@ -101,12 +115,8 @@ export async function transcribeAudio(
   const groqKey = process.env.GROQ_API_KEY?.trim();
   if (!groqKey || !hostConfigured() || !messageId) return null;
   try {
-    const media = await evo(`/chat/getBase64FromMediaMessage/${encodeURIComponent(instance)}`, {
-      method: "POST",
-      body: { message: { key: { id: messageId } }, convertToMp4: false },
-    });
-    const base64 = (media.json as { base64?: string } | null)?.base64;
-    if (!media.ok || !base64) return null;
+    const base64 = await downloadMedia(instance, messageId);
+    if (!base64) return null;
     const type = mimetype.split(";")[0]!.trim() || "audio/ogg";
     const ext = type.includes("mpeg") ? "mp3" : type.includes("mp4") ? "m4a" : "ogg";
     const form = new FormData();

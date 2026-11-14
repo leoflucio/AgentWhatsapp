@@ -34,6 +34,13 @@ import {
 import { listFreeSlots, scheduleOf } from "@/lib/agenda.server";
 import { sendText, transcribeAudio } from "@/lib/evolution.server";
 import {
+  DOC_RELAY_RULE,
+  analysisBody,
+  canRequestAnalysis,
+  pdfOf,
+  unreadableBody,
+} from "@/lib/document-rules";
+import {
   AGENT_BOOKED_NOTE,
   buildSystemPrompt,
   cameFromAd,
@@ -57,6 +64,15 @@ import {
   stripClosingOffer,
   phoneOf,
   shouldAgentReply,
+  looksLikeAutoReply,
+  historyForModel,
+  crossedWithReply,
+  isNoReply,
+  CROSSED_NOTE,
+  AUTO_REPLY_PREFIX,
+  AI_DOWN_MESSAGE,
+  AI_DOWN_REPEAT_MS,
+  TEMPLATE_MIN_CHARS,
   textOf,
   audioOf,
   MAX_AUDIO_SECONDS,
@@ -151,20 +167,138 @@ async function answeredBy(admin: any, conversationId: string): Promise<"agente" 
   if (!lastContact) return null;
   const { data } = await admin
     .from("messages")
-    .select("author")
+    .select("author, body")
     .eq("conversation_id", conversationId)
     .in("author", ["agente", "equipe"])
     .gt("created_at", lastContact.created_at)
     .limit(5);
-  const authors = ((data ?? []) as any[]).map((r) => r.author as string);
+  // Saudação/ausência automática do celular não é a equipe respondendo.
+  const authors = ((data ?? []) as any[])
+    .filter((r) => !String(r.body ?? "").startsWith(AUTO_REPLY_PREFIX))
+    .map((r) => r.author as string);
   if (authors.includes("equipe")) return "equipe";
   return authors.includes("agente") ? "agente" : null;
+}
+
+/**
+ * Mensagem do celular do negócio que é saudação, boas-vindas ou ausência
+ * automática do WhatsApp Business? Olha as últimas mensagens da conversa e se
+ * o mesmo texto já saiu do celular para outra pessoa (modelo).
+ */
+async function isAutoReply(
+  admin: any,
+  args: { accountId: string; conversationId: string; sentAtMs: number; text: string },
+): Promise<boolean> {
+  const { data } = await admin
+    .from("messages")
+    .select("author, created_at")
+    .eq("conversation_id", args.conversationId)
+    .order("created_at", { ascending: false })
+    .limit(10);
+  const rows = (data ?? []) as { author: string; created_at: string }[];
+  const idx = rows.findIndex((r) => r.author === "contato");
+  let sentElsewhere = false;
+  if (args.text.length >= TEMPLATE_MIN_CHARS) {
+    const { data: same } = await admin
+      .from("messages")
+      .select("id")
+      .eq("account_id", args.accountId)
+      .eq("author", "equipe")
+      .in("body", [args.text, `${AUTO_REPLY_PREFIX}${args.text}`])
+      .neq("conversation_id", args.conversationId)
+      .gte("created_at", new Date(args.sentAtMs - 90 * 86_400_000).toISOString())
+      .limit(1);
+    sentElsewhere = (same ?? []).length > 0;
+  }
+  return looksLikeAutoReply({
+    sentAtMs: args.sentAtMs,
+    lastContactAtMs: idx === -1 ? null : new Date(rows[idx]!.created_at).getTime(),
+    answeredSinceContact: idx > 0,
+    text: args.text,
+    sentElsewhere,
+  });
+}
+
+/** Erro da IA em uma linha para o log ("429 | Resource exhausted | ..."). */
+function aiErrorText(e: unknown): string {
+  const err = e as { statusCode?: number; responseBody?: string; message?: string };
+  const body = typeof err?.responseBody === "string" ? err.responseBody.slice(0, 300) : "";
+  return [err?.statusCode, err?.message ?? String(e), body].filter(Boolean).join(" | ");
+}
+
+/**
+ * IA fora do ar (limite da chave, modelos indisponíveis): a conversa aparece
+ * em Conversas para a equipe e a pessoa recebe um aviso fixo, no máximo um por
+ * dia nesta conversa, em vez de ficar sem nada.
+ */
+async function handleAiFailure(
+  admin: any,
+  args: { ctx: Ctx; convId: string; phone: string; error: unknown },
+) {
+  console.error("[agente] IA falhou", args.convId, aiErrorText(args.error));
+  await admin
+    .from("conversations")
+    .update({ attention_reason: "O agente não conseguiu responder (erro da IA)" })
+    .eq("id", args.convId);
+  const { data: warned } = await admin
+    .from("messages")
+    .select("id")
+    .eq("conversation_id", args.convId)
+    .eq("author", "agente")
+    .eq("body", AI_DOWN_MESSAGE)
+    .gte("created_at", new Date(Date.now() - AI_DOWN_REPEAT_MS).toISOString())
+    .limit(1);
+  if ((warned ?? []).length > 0) return;
+  // Registra antes de enviar: o eco é reconhecido como do agente.
+  await admin.from("messages").insert({
+    conversation_id: args.convId,
+    account_id: args.ctx.account.id,
+    author: "agente",
+    body: AI_DOWN_MESSAGE,
+  });
+  await sendText({
+    instance: args.ctx.instance,
+    token: args.ctx.token,
+    to: args.phone,
+    text: AI_DOWN_MESSAGE,
+  }).catch((e: unknown) => console.error("[agente] aviso de IA fora do ar", e));
+}
+
+/**
+ * Lê este PDF? Leitura ligada na tela Documentos, agente ligado, número
+ * autorizado (lista vazia = qualquer um), em modo teste só os testadores, e
+ * não é o reenvio do mesmo evento (a análise custa uma chamada de IA).
+ */
+async function shouldAnalyzePdf(
+  admin: any,
+  settings: any,
+  phone: string,
+  messageId: string | undefined,
+): Promise<boolean> {
+  if (!settings?.enabled || !settings?.doc_enabled) return false;
+  if (!canRequestAnalysis((settings.doc_numbers ?? []) as string[], phone)) return false;
+  if (settings.test_mode !== false) {
+    const testers = (settings.test_numbers ?? []) as string[];
+    if (!testers.some((n) => samePhoneBR(n, phone))) return false;
+  }
+  if (messageId) {
+    const { data } = await admin
+      .from("messages")
+      .select("id")
+      .eq("wa_message_id", messageId)
+      .limit(1);
+    if ((data ?? []).length > 0) return false;
+  }
+  return true;
 }
 
 async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
   if (isGroupOrBroadcast(m.key?.remoteJid)) return;
   const phone = phoneOf(m);
-  if (!phone) return;
+  if (!phone) {
+    console.log("[agente] mensagem sem número (só @lid)", m.key?.remoteJid);
+    return;
+  }
   const accountId = ctx.account.id;
   const now = new Date().toISOString();
   const text = textOf(m);
@@ -195,7 +329,23 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
       .single();
     conv = created;
   }
-  if (!conv) return;
+  if (!conv) {
+    // Saudação automática do celular e a primeira mensagem da pessoa chegam
+    // juntas, em webhooks paralelos: os dois criam a conversa e um esbarra no
+    // UNIQUE (account_id, phone). Sem reler, a mensagem da pessoa sumia e o
+    // agente nunca respondia.
+    const { data: raced } = await admin
+      .from("conversations")
+      .select("*")
+      .eq("account_id", accountId)
+      .eq("phone", phone)
+      .maybeSingle();
+    conv = raced;
+  }
+  if (!conv) {
+    console.error("[agente] conversa não encontrada nem criada", accountId);
+    return;
+  }
 
   const { data: settings } = await admin
     .from("agent_settings")
@@ -227,14 +377,27 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
       .gte("created_at", new Date(Date.now() - 10 * 60_000).toISOString())
       .limit(1);
     if ((echo ?? []).length > 0) return;
+    // Saudação, boas-vindas ou ausência automática do WhatsApp Business: fica
+    // no histórico, mas não cala o agente (senão ele ficava mudo justamente
+    // com quem chegava pela primeira vez).
+    const automatic = await isAutoReply(admin, {
+      accountId,
+      conversationId: conv.id,
+      sentAtMs: Date.now(),
+      text,
+    });
     const { error } = await admin.from("messages").insert({
       conversation_id: conv.id,
       account_id: accountId,
       author: "equipe",
-      body: teamBody,
+      body: automatic ? `${AUTO_REPLY_PREFIX}${teamBody}` : teamBody,
       wa_message_id: m.key?.id ?? null,
     });
     if (error) return; // é o eco de uma mensagem do próprio agente
+    if (automatic) {
+      console.log("[agente] mensagem automática do celular; agente segue", conv.id);
+      return;
+    }
     await admin
       .from("conversations")
       .update({
@@ -266,6 +429,27 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
         ? "(o contato enviou um áudio longo; peça um resumo por escrito)"
         : "(o contato enviou um áudio que não foi possível ouvir; peça para escrever)";
   }
+  // PDF (ex.: declaração de imposto de renda) com a leitura de documentos
+  // ligada (tela Documentos): o agente lê e analisa com os critérios do
+  // negócio; o resultado entra na conversa como parte da mensagem da pessoa.
+  const pdf = pdfOf(m);
+  let docResult: { result: string; pages: number | null; fileName: string } | null = null;
+  if (pdf && (await shouldAnalyzePdf(admin, settings, phone, m.key?.id))) {
+    const { analyzePdf } = await import("@/lib/document.server");
+    const r = await analyzePdf({
+      instance: ctx.instance,
+      messageId: m.key?.id,
+      fileName: pdf.fileName,
+      caption: pdf.caption,
+      instructions: String(settings?.doc_instructions ?? ""),
+    });
+    if (r.ok) {
+      docResult = { result: r.result, pages: r.pages, fileName: pdf.fileName };
+      body = analysisBody(pdf.fileName, pdf.caption, r.result);
+    } else {
+      body = unreadableBody(pdf.fileName, pdf.caption, r.reason === "grande");
+    }
+  }
   body = body || contactMediaNote(m);
   const { data: mine, error: dup } = await admin
     .from("messages")
@@ -279,6 +463,18 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
     .select("id, created_at")
     .single();
   if (dup || !mine) return; // reenvio do mesmo evento
+  if (docResult) {
+    const { error: docErr } = await admin.from("document_analyses").insert({
+      account_id: accountId,
+      conversation_id: conv.id,
+      phone,
+      contact_name: conv.contact_name ?? m.pushName ?? null,
+      file_name: docResult.fileName,
+      pages: docResult.pages,
+      result: docResult.result,
+    });
+    if (docErr) console.error("[agente] análise do documento não gravada", docErr.message);
+  }
   await admin
     .from("conversations")
     .update({
@@ -377,36 +573,54 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
     const bodies = ((pending ?? []) as any[]).map((p) => String(p.body ?? ""));
     if (onlyAcknowledgments(bodies, String(lastAgent.body ?? ""))) return;
   }
+  // A pessoa escreveu antes de a última resposta sair: a IA é avisada para não
+  // repetir a mesma resposta com outras palavras.
+  let crossed = crossedWithReply(m, lastAgent?.created_at);
 
+  const replyArgs = { ctx, settings, conv, phone, listed };
   let out: Awaited<ReturnType<typeof generateAgentReply>>;
+  let answered: "agente" | "equipe" | null = null;
   try {
-    out = await generateAgentReply(admin, { ctx, settings, conv, phone, listed });
+    out = await generateAgentReply(admin, { ...replyArgs, note: crossed ? CROSSED_NOTE : "" });
+    // Outra execução respondeu enquanto esta pensava (ela mexeu na agenda e
+    // enviou mesmo com mensagem nova): esta resposta não viu aquela e sairia
+    // repetida, e descartá-la deixava a mensagem nova sem resposta. Refaz uma
+    // vez, já vendo a outra resposta.
+    answered = await answeredBy(admin, conv.id);
+    if (answered === "agente" && !out?.acted) {
+      crossed = true;
+      out = await generateAgentReply(admin, { ...replyArgs, note: CROSSED_NOTE });
+      answered = (await answeredBy(admin, conv.id)) === "equipe" ? "equipe" : null;
+    }
   } catch (e) {
-    // Erro da IA (limite da chave, fora do ar): aparece em Conversas para a equipe.
-    console.error("[agente] IA falhou", e instanceof Error ? e.message : e);
-    await admin
-      .from("conversations")
-      .update({ attention_reason: "O agente não conseguiu responder (erro da IA)" })
-      .eq("id", conv.id);
+    await handleAiFailure(admin, { ctx, convId: conv.id, phone, error: e });
     return;
   }
-  const toSend = [out?.text ?? "", ...(out?.followUps ?? [])].filter((t) => t.trim());
+  // Nada novo a dizer depois de respostas cruzadas: não envia.
+  const mainText = isNoReply(out?.text ?? "") ? "" : (out?.text ?? "");
+  const toSend = [mainText, ...(out?.followUps ?? [])].filter((t) => t.trim());
   // Chamou a equipe sem escrever nada: avisa a pessoa em vez de ficar mudo.
   if (toSend.length === 0 && out?.calledTeam) toSend.push(CALLED_TEAM_MESSAGE);
   if (toSend.length === 0) {
-    console.log("[agente] resposta vazia da IA", conv.id);
+    console.log(
+      crossed ? "[agente] nada a acrescentar (cruzou)" : "[agente] resposta vazia da IA",
+      conv.id,
+    );
     return;
   }
   // Chegou outra mensagem enquanto a IA pensava: a resposta já está velha e
   // a execução da mensagem nova responde tudo. Se esta mexeu na agenda ou
   // chamou a equipe, envia assim mesmo (a pessoa precisa saber).
   if (!out?.acted && (await hasNewerContactMessage(admin, conv.id, mine.created_at))) return;
-  // A IA demorou e alguém já respondeu: a equipe pelo celular (nunca passa por
-  // cima dela) ou outra execução da mesma rajada (não repete; só envia assim
-  // mesmo se esta mexeu na agenda, porque a pessoa precisa saber).
-  const answered = await answeredBy(admin, conv.id);
-  if (answered === "equipe" || (answered === "agente" && !out?.agendaChanged)) {
-    console.log("[agente] já respondido por", answered, conv.id);
+  // A IA demorou e a equipe respondeu pelo celular: nunca passa por cima dela.
+  // Outra execução da mesma rajada que respondeu antes: só envia se esta mexeu
+  // na agenda (a pessoa precisa saber); a refeita acima já viu a outra resposta.
+  if (answered === "agente" && !out?.agendaChanged) {
+    console.log("[agente] já respondido por agente", conv.id);
+    return;
+  }
+  if (answered === "equipe" || (await answeredBy(admin, conv.id)) === "equipe") {
+    console.log("[agente] já respondido por equipe", conv.id);
     return;
   }
 
@@ -463,7 +677,15 @@ async function findListedContact(
 
 async function generateAgentReply(
   admin: any,
-  args: { ctx: Ctx; settings: any; conv: any; phone: string; listed: ListedContact | null },
+  args: {
+    ctx: Ctx;
+    settings: any;
+    conv: any;
+    phone: string;
+    listed: ListedContact | null;
+    /** Instrução extra do momento (ex.: respostas que se cruzaram). */
+    note?: string;
+  },
 ): Promise<{
   text: string;
   followUps: string[];
@@ -516,10 +738,23 @@ async function generateAgentReply(
     .gte("created_at", new Date(Date.now() - HISTORY_WINDOW_HOURS * 3600_000).toISOString())
     .order("created_at", { ascending: false })
     .limit(HISTORY_LIMIT);
-  const messages = ((history ?? []) as any[]).reverse().map((h) => ({
-    role: h.author === "contato" ? ("user" as const) : ("assistant" as const),
-    content: h.body as string,
-  }));
+  // Mensagem automática do celular (saudação/ausência do WhatsApp Business)
+  // não foi o agente que escreveu: vai para o contexto, não para o histórico,
+  // senão a IA achava que já tinha se apresentado. O histórico sempre começa
+  // pela pessoa; o que o celular mandou antes vai para o contexto (`opening`).
+  const rows = ((history ?? []) as any[]).reverse();
+  const isAuto = (h: any) => String(h.body ?? "").startsWith(AUTO_REPLY_PREFIX);
+  const autoSent = rows
+    .filter(isAuto)
+    .map((h) => String(h.body).slice(AUTO_REPLY_PREFIX.length).trim());
+  const { messages, opening } = historyForModel(
+    rows
+      .filter((h) => !isAuto(h))
+      .map((h) => ({
+        role: h.author === "contato" ? ("user" as const) : ("assistant" as const),
+        content: h.body as string,
+      })),
+  );
 
   // Horários futuros desta pessoa: reservas do agente e horários já confirmados.
   const { data: upcoming } = await admin
@@ -562,6 +797,12 @@ async function generateAgentReply(
       ? `Está na lista de contatos do negócio${listed.name ? ` como "${listed.name}"` : ""}.${listed.notes ? ` Observações da equipe (use só como contexto, não leia para a pessoa): ${listed.notes}` : ""}`
       : "",
     conv.from_ad ? "Chegou por um anúncio." : "",
+    autoSent.length
+      ? `O celular do negócio mandou sozinho a mensagem automática: "${autoSent.join(" / ")}". Não foi você; não repita o que ela diz.`
+      : "",
+    opening.length
+      ? `Antes de a pessoa escrever, o celular do negócio já tinha mandado: "${opening.join(" / ")}".`
+      : "",
     !booking
       ? ""
       : apptText
@@ -609,7 +850,7 @@ async function generateAgentReply(
   ]
     .filter(Boolean)
     .join("\n");
-  const system = buildSystemPrompt({
+  const basePrompt = buildSystemPrompt({
     hours: scheduleText(schedule),
     agentName: settings?.agent_name,
     businessName: ctx.account.name,
@@ -618,6 +859,7 @@ async function generateAgentReply(
     health: settings?.health_rules === true,
     instructions,
     today: today.split("-").reverse().join("/"),
+    now: localDateTimeOf(new Date().toISOString()).hora,
     calendar: calendarText(today, 14),
     contact,
     collect: collectPromptText(
@@ -627,6 +869,9 @@ async function generateAgentReply(
     sequentialFill: sequential,
     autoConfirm,
   });
+  const system = [basePrompt, settings?.doc_enabled ? DOC_RELAY_RULE : "", args.note ?? ""]
+    .filter(Boolean)
+    .join("\n\n");
 
   const dataField = z
     .string()

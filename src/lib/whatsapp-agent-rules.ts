@@ -18,6 +18,8 @@ export type EvoIncoming = {
   senderPn?: string;
   /** Tipo informado pela Evolution ("conversation", "stickerMessage", "reactionMessage"...). */
   messageType?: string;
+  /** Hora do envio no WhatsApp, em segundos (a Evolution manda número, texto ou {low}). */
+  messageTimestamp?: number | string | { low?: number };
   message?: {
     conversation?: string;
     extendedTextMessage?: {
@@ -28,6 +30,10 @@ export type EvoIncoming = {
     audioMessage?: { seconds?: number; mimetype?: string; ptt?: boolean };
     videoMessage?: { caption?: string; gifPlayback?: boolean; gifAttribution?: unknown };
     documentMessage?: { caption?: string; fileName?: string; mimetype?: string };
+    /** PDF/arquivo mandado com legenda: o WhatsApp embrulha o documentMessage aqui. */
+    documentWithCaptionMessage?: {
+      message?: { documentMessage?: { caption?: string; fileName?: string; mimetype?: string } };
+    };
     stickerMessage?: unknown;
     lottieStickerMessage?: unknown;
     buttonsResponseMessage?: { selectedDisplayText?: string };
@@ -65,6 +71,7 @@ export function textOf(m: EvoIncoming): string {
     msg.extendedTextMessage?.text ??
     msg.imageMessage?.caption ??
     msg.videoMessage?.caption ??
+    msg.documentWithCaptionMessage?.message?.documentMessage?.caption ??
     msg.buttonsResponseMessage?.selectedDisplayText ??
     msg.listResponseMessage?.title ??
     ""
@@ -82,7 +89,7 @@ export function mediaLabel(m: EvoIncoming): string | null {
   if (msg.audioMessage) return "(mensagem de voz)";
   if (msg.imageMessage) return "(foto)";
   if (msg.videoMessage) return "(vídeo)";
-  if (msg.documentMessage) return "(arquivo)";
+  if (msg.documentMessage || msg.documentWithCaptionMessage) return "(arquivo)";
   return null;
 }
 
@@ -118,8 +125,9 @@ export function contactMediaNote(m: EvoIncoming): string {
   const msg = m.message ?? {};
   if (msg.imageMessage) return "(o contato enviou uma foto, sem texto)";
   if (msg.videoMessage) return "(o contato enviou um vídeo, sem texto)";
-  if (msg.documentMessage) {
-    const name = String(msg.documentMessage.fileName ?? "").trim();
+  const doc = msg.documentMessage ?? msg.documentWithCaptionMessage?.message?.documentMessage;
+  if (doc || msg.documentWithCaptionMessage) {
+    const name = String(doc?.fileName ?? "").trim();
     return name
       ? `(o contato enviou o arquivo "${name.slice(0, 80)}", sem texto)`
       : "(o contato enviou um arquivo, sem texto)";
@@ -136,6 +144,135 @@ export function audioOf(m: EvoIncoming): { seconds: number; mimetype: string } |
 
 /** Áudios mais longos que isto não são transcritos (o agente pede um resumo por escrito). */
 export const MAX_AUDIO_SECONDS = 300;
+
+/** Hora do envio no WhatsApp em milissegundos, ou null se não veio. */
+export function sentAtMs(m: EvoIncoming): number | null {
+  const raw = m.messageTimestamp;
+  const n = typeof raw === "object" && raw !== null ? Number(raw.low) : Number(raw ?? Number.NaN);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n * 1000;
+}
+
+/**
+ * A pessoa escreveu antes de a última resposta do agente sair (as mensagens se
+ * cruzaram): a resposta foi feita sem ver o que ela escreveu, e o banco grava a
+ * mensagem dela depois, por causa da demora do webhook. O WhatsApp dá a hora em
+ * segundos inteiros, então envio no mesmo segundo conta como cruzado.
+ */
+export function crossedWithReply(
+  m: EvoIncoming,
+  lastAgentCreatedAt: string | null | undefined,
+): boolean {
+  const sent = sentAtMs(m);
+  if (sent === null || !lastAgentCreatedAt) return false;
+  const reply = new Date(lastAgentCreatedAt).getTime();
+  return Number.isFinite(reply) && sent < reply;
+}
+
+/** A IA devolve isto quando não há nada novo a dizer (nada é enviado). */
+export const NO_REPLY_MARKER = "[SEM_RESPOSTA]";
+
+export function isNoReply(text: string): boolean {
+  return /\[?\s*SEM_RESPOSTA\s*\]?/i.test(text);
+}
+
+/** Instrução extra quando a resposta anterior cruzou com as mensagens da pessoa. */
+export const CROSSED_NOTE = `ATENÇÃO: a sua última resposta e as últimas mensagens da pessoa se cruzaram (ela escreveu antes de ler a sua resposta). Se a sua última resposta já atende o que ela escreveu depois, NÃO repita nem reformule (nada de "Combinado", "Até mais" de novo): responda exatamente ${NO_REPLY_MARKER} e mais nada. Só escreva uma resposta se ela trouxe algo novo que ainda precisa de resposta (pergunta, pedido, mudança de horário, informação nova).`;
+
+/**
+ * Texto típico de mensagem automática do WhatsApp Business (saudação,
+ * ausência, "em breve retornaremos", menu de opções).
+ */
+const AUTO_REPLY_PATTERNS: RegExp[] = [
+  /mensagem automatica|resposta automatica|atendimento automatico/,
+  /seja (muito )?bem[ -]vind[oa]/,
+  /em breve (entraremos|retornaremos|responderemos|daremos retorno|um de nossos|um dos nossos|nossa equipe)/,
+  /(retornaremos|responderemos) (o mais breve|assim que|em breve)/,
+  /(colaboradores|atendentes|nossa equipe) (estao|esta) em (outro )?atendimento/,
+  /fora do (nosso )?horario de (atendimento|funcionamento)/,
+  /nosso horario de (atendimento|funcionamento)/,
+  /agradecemos (o|seu|pelo) contato/,
+  /obrigad[oa] por (entrar em contato|nos contatar|sua mensagem)/,
+  /para agilizar(mos)? (o )?(seu )?atendimento/,
+  /(digite|escolha|selecione) (o numero|uma das opcoes|a opcao)/,
+];
+
+export function autoReplyText(text: string): boolean {
+  const t = text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+  return AUTO_REPLY_PATTERNS.some((re) => re.test(t));
+}
+
+/** Resposta do celular até este tempo depois do contato pode ser automática. */
+export const AUTO_REPLY_WINDOW_MS = 20_000;
+/** Ninguém lê e digita uma resposta em menos que isto: é automática. */
+export const INSTANT_REPLY_MS = 3_000;
+/** Texto repetido em outra conversa só conta como modelo a partir deste tamanho ("Oi" não). */
+export const TEMPLATE_MIN_CHARS = 20;
+/** Marca no histórico da mensagem automática do celular (não é a equipe assumindo). */
+export const AUTO_REPLY_PREFIX = "(mensagem automática do celular) ";
+
+/**
+ * Mensagem enviada pelo celular do negócio que é automática (saudação do
+ * WhatsApp Business, boas-vindas do anúncio, mensagem de ausência). Ela não
+ * pode valer como "equipe assumiu", senão o agente fica mudo justamente com
+ * quem chega pela primeira vez. Precisa PARECER modelo (texto típico de robô
+ * ou o mesmo texto já mandado em outra conversa); só um envio quase
+ * instantâneo depois do contato dispensa isso. A equipe respondendo rápido ou
+ * puxando conversa continua sendo a equipe.
+ */
+export function looksLikeAutoReply(args: {
+  sentAtMs: number;
+  /** Última mensagem do contato (ms), ou null se ele ainda não escreveu. */
+  lastContactAtMs: number | null;
+  /** Já houve resposta (agente ou equipe) depois da última mensagem do contato. */
+  answeredSinceContact: boolean;
+  /** Texto enviado ("" para áudio/foto). */
+  text: string;
+  /** O mesmo texto já saiu do celular do negócio em outra conversa. */
+  sentElsewhere: boolean;
+}): boolean {
+  const template =
+    (args.text.length >= TEMPLATE_MIN_CHARS && args.sentElsewhere) ||
+    (args.text !== "" && autoReplyText(args.text));
+  if (args.lastContactAtMs === null) return template;
+  if (args.answeredSinceContact) return false;
+  const gap = args.sentAtMs - args.lastContactAtMs;
+  if (gap < 0 || gap > AUTO_REPLY_WINDOW_MS) return false;
+  return gap <= INSTANT_REPLY_MS || template;
+}
+
+/**
+ * Histórico para a IA sempre começando pela pessoa. Com a saudação automática
+ * do celular, a conversa começa com uma mensagem do negócio e o Gemini pode
+ * recusar uma conversa que abre com o modelo. As mensagens antes da primeira
+ * da pessoa saem do histórico e voltam como contexto (`opening`).
+ */
+export function historyForModel<T extends { role: "user" | "assistant"; content: string }>(
+  messages: T[],
+): { messages: T[]; opening: string[] } {
+  const first = messages.findIndex((m) => m.role === "user");
+  if (first <= 0) return { messages: first === 0 ? messages : [], opening: [] };
+  return {
+    messages: messages.slice(first),
+    opening: messages.slice(0, first).map((m) => m.content),
+  };
+}
+
+/** Aviso fixo (sem IA) quando a IA está fora do ar: no máximo um por dia na conversa. */
+export const AI_DOWN_MESSAGE = "Recebemos sua mensagem! Já já respondemos por aqui.";
+export const AI_DOWN_REPEAT_MS = 24 * 3600_000;
+
+/** Cumprimento pela hora local (HH:MM): bom dia até 11h59, boa tarde até 17h59, boa noite depois. */
+export function greetingFor(hora: string): "Bom dia" | "Boa tarde" | "Boa noite" {
+  const h = Number(hora.split(":")[0]);
+  if (h >= 5 && h < 12) return "Bom dia";
+  if (h >= 12 && h < 18) return "Boa tarde";
+  return "Boa noite";
+}
 
 /** A conversa começou por um anúncio (clique para o WhatsApp no Instagram/Facebook)? */
 export function cameFromAd(m: EvoIncoming): boolean {
@@ -269,6 +406,8 @@ export function buildSystemPrompt(args: {
   sequentialFill?: boolean;
   /** O agente marca o horário já confirmado (sem a equipe confirmar). */
   autoConfirm?: boolean;
+  /** Hora local agora (HH:MM, Brasília), para o bom dia / boa tarde / boa noite. */
+  now?: string | null;
 }): string {
   const booking = args.booking !== false;
   const business = [
@@ -288,7 +427,9 @@ export function buildSystemPrompt(args: {
       : NO_BOOKING_RULES),
     ...(args.health ? HEALTH_RULES : []),
     booking && args.sequentialFill ? SEQUENTIAL_FILL_RULE : "",
-    `Hoje é ${args.today} (horário de Brasília).`,
+    args.now
+      ? `Hoje é ${args.today}, agora são ${args.now} (horário de Brasília). Para cumprimentar, diga "${greetingFor(args.now)}".`
+      : `Hoje é ${args.today} (horário de Brasília).`,
     args.calendar
       ? `CALENDÁRIO (use para saber a data de "sexta", "amanhã" etc.; nunca calcule de cabeça): ${args.calendar}`
       : "",

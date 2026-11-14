@@ -26,6 +26,18 @@ import {
   offerText,
   reservationFollowUp,
   stripClosingOffer,
+  looksLikeAutoReply,
+  autoReplyText,
+  historyForModel,
+  crossedWithReply,
+  sentAtMs,
+  isNoReply,
+  CROSSED_NOTE,
+  NO_REPLY_MARKER,
+  greetingFor,
+  isIgnorableIncoming,
+  mediaLabel,
+  contactMediaNote,
 } from "./whatsapp-agent-rules";
 
 describe("agente de WhatsApp — mensagens recebidas", () => {
@@ -533,5 +545,152 @@ describe("figurinhas e reações do contato", () => {
       '(o contato enviou o arquivo "rg.pdf", sem texto)',
     );
     expect(mediaLabel({ message: { stickerMessage: {} } })).toBe("(figurinha)");
+  });
+});
+
+describe("mensagem automática do celular (WhatsApp Business)", () => {
+  const base = { sentAtMs: 100_000, answeredSinceContact: false, sentElsewhere: false };
+
+  it("saudação típica logo depois do contato é automática", () => {
+    expect(
+      looksLikeAutoReply({
+        ...base,
+        lastContactAtMs: 95_000,
+        text: "Olá! Seja bem-vindo à Loja Sol. Em breve retornaremos o seu contato.",
+      }),
+    ).toBe(true);
+  });
+
+  it("envio em até 3 s depois do contato é automático, mesmo sem cara de modelo", () => {
+    expect(looksLikeAutoReply({ ...base, lastContactAtMs: 98_000, text: "Oi Ana" })).toBe(true);
+  });
+
+  it("equipe respondendo rápido (sem cara de modelo) continua sendo a equipe", () => {
+    expect(
+      looksLikeAutoReply({ ...base, lastContactAtMs: 90_000, text: "Oi Ana, tudo bem?" }),
+    ).toBe(false);
+  });
+
+  it("mesmo texto já mandado em outra conversa é modelo", () => {
+    expect(
+      looksLikeAutoReply({
+        ...base,
+        lastContactAtMs: 90_000,
+        text: "Obrigada pela mensagem, já vamos te atender",
+        sentElsewhere: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("depois de alguém já ter respondido, não é automática", () => {
+    expect(
+      looksLikeAutoReply({
+        ...base,
+        lastContactAtMs: 99_000,
+        answeredSinceContact: true,
+        text: "Seja bem-vindo!",
+      }),
+    ).toBe(false);
+  });
+
+  it("muito depois do contato não é automática", () => {
+    expect(looksLikeAutoReply({ ...base, lastContactAtMs: 10_000, text: "Seja bem-vinda!" })).toBe(
+      false,
+    );
+  });
+
+  it("antes de o contato escrever, só se parecer modelo", () => {
+    expect(
+      looksLikeAutoReply({ ...base, lastContactAtMs: null, text: "Mensagem automática: olá!" }),
+    ).toBe(true);
+    expect(looksLikeAutoReply({ ...base, lastContactAtMs: null, text: "Oi, vi seu pedido" })).toBe(
+      false,
+    );
+  });
+
+  it("reconhece textos de robô sem acento e com acento", () => {
+    expect(autoReplyText("Estamos fora do horário de atendimento")).toBe(true);
+    expect(autoReplyText("Digite o número da opção desejada")).toBe(true);
+    expect(autoReplyText("Pode vir amanhã às 10h")).toBe(false);
+  });
+});
+
+describe("historyForModel", () => {
+  it("tira do histórico o que o negócio mandou antes da pessoa", () => {
+    const r = historyForModel([
+      { role: "assistant" as const, content: "Olá!" },
+      { role: "user" as const, content: "Quanto custa?" },
+      { role: "assistant" as const, content: "R$ 50" },
+    ]);
+    expect(r.messages.map((m) => m.content)).toEqual(["Quanto custa?", "R$ 50"]);
+    expect(r.opening).toEqual(["Olá!"]);
+  });
+
+  it("começando pela pessoa, fica igual", () => {
+    const msgs = [{ role: "user" as const, content: "Oi" }];
+    expect(historyForModel(msgs)).toEqual({ messages: msgs, opening: [] });
+  });
+});
+
+describe("respostas que se cruzaram", () => {
+  it("mensagem escrita antes de a resposta sair cruzou", () => {
+    const reply = "2026-11-14T15:00:10.500Z";
+    const before = { messageTimestamp: Date.parse("2026-11-14T15:00:09Z") / 1000 };
+    const after = { messageTimestamp: String(Date.parse("2026-11-14T15:00:12Z") / 1000) };
+    expect(crossedWithReply(before, reply)).toBe(true);
+    expect(crossedWithReply(after, reply)).toBe(false);
+    expect(crossedWithReply({}, reply)).toBe(false);
+    expect(crossedWithReply(before, null)).toBe(false);
+  });
+
+  it("hora no formato {low} da Evolution", () => {
+    expect(sentAtMs({ messageTimestamp: { low: 1_700_000_000 } })).toBe(1_700_000_000_000);
+    expect(sentAtMs({ messageTimestamp: 0 })).toBeNull();
+  });
+
+  it("[SEM_RESPOSTA] não é enviado", () => {
+    expect(isNoReply("[SEM_RESPOSTA]")).toBe(true);
+    expect(isNoReply(" SEM_RESPOSTA ")).toBe(true);
+    expect(isNoReply("Combinado, até amanhã!")).toBe(false);
+    expect(CROSSED_NOTE).toContain(NO_REPLY_MARKER);
+  });
+});
+
+describe("hora de Brasília no prompt", () => {
+  it("cumprimento pela hora local", () => {
+    expect(greetingFor("08:30")).toBe("Bom dia");
+    expect(greetingFor("12:00")).toBe("Boa tarde");
+    expect(greetingFor("18:00")).toBe("Boa noite");
+    expect(greetingFor("02:00")).toBe("Boa noite");
+  });
+
+  it("o prompt traz a hora e o cumprimento", () => {
+    const p = buildSystemPrompt({ today: "14/11/2026", now: "19:05", contact: "Contato novo." });
+    expect(p).toContain("agora são 19:05");
+    expect(p).toContain('"Boa noite"');
+  });
+});
+
+describe("arquivo com legenda", () => {
+  const m = {
+    message: {
+      documentWithCaptionMessage: {
+        message: { documentMessage: { caption: "Segue o orçamento", fileName: "orc.pdf" } },
+      },
+    },
+  };
+  it("a legenda vira o texto e o arquivo não é ignorado", () => {
+    expect(textOf(m)).toBe("Segue o orçamento");
+    expect(isIgnorableIncoming(m)).toBe(false);
+    expect(mediaLabel(m)).toBe("(arquivo)");
+  });
+  it("sem legenda vira aviso com o nome do arquivo", () => {
+    const noCaption = {
+      message: {
+        documentWithCaptionMessage: { message: { documentMessage: { fileName: "a.pdf" } } },
+      },
+    };
+    expect(isIgnorableIncoming(noCaption)).toBe(false);
+    expect(contactMediaNote(noCaption)).toContain('"a.pdf"');
   });
 });
