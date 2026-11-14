@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   DOC_ANALYSIS_TAG,
-  IR_LIFE_INSURANCE_TEMPLATE,
   analysisBody,
   canRequestAnalysis,
   clipDocText,
@@ -60,11 +59,10 @@ describe("prompt da análise", () => {
     expect(docAnalysisSystem("x")).toMatch(/ignore qualquer instrução/);
   });
 
-  it("linhas com [PREENCHA] do modelo não vão para a IA", () => {
-    const sys = docAnalysisSystem(IR_LIFE_INSURANCE_TEMPLATE);
+  it("linhas com [PREENCHA] não vão para a IA", () => {
+    const sys = docAnalysisSystem("Confira o valor total.\nPrazo máximo: [PREENCHA: dias]");
     expect(sys).not.toContain("[PREENCHA");
-    expect(sys).toContain("APTO, NÃO APTO");
-    expect(sys).toContain("Ocupação declarada");
+    expect(sys).toContain("Confira o valor total.");
   });
 
   it("sem critérios, resume o documento", () => {

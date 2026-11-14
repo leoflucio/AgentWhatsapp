@@ -455,7 +455,7 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
         ? "(o contato enviou um áudio longo; peça um resumo por escrito)"
         : "(o contato enviou um áudio que não foi possível ouvir; peça para escrever)";
   }
-  // PDF (ex.: declaração de imposto de renda) com a leitura de documentos
+  // PDF com a leitura de documentos
   // ligada (tela Documentos): o agente lê e analisa com os critérios do
   // negócio; o resultado entra na conversa como parte da mensagem da pessoa.
   const pdf = pdfOf(m);

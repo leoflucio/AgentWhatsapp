@@ -2,11 +2,10 @@
  * Leitura de PDF pelo agente (tela Documentos). Regras puras, testadas em
  * document-rules.test.ts.
  *
- * O contato (ex.: o gerente) manda um PDF no WhatsApp — por exemplo a
- * declaração de imposto de renda de um cliente — e o agente analisa o
- * documento com os critérios que o negócio escreveu na tela Documentos (ex.:
- * se a pessoa é apta a contratar um seguro de vida). O resultado entra na
- * conversa e fica guardado na tela; o PDF em si não é guardado.
+ * O contato manda um PDF no WhatsApp e o agente analisa o documento com os
+ * critérios que o próprio negócio escreveu na tela Documentos (o campo começa
+ * vazio; cada negócio escreve o seu). O resultado entra na conversa e fica
+ * guardado na tela; o PDF em si não é guardado.
  */
 import { samePhoneBR } from "@/lib/phone";
 import { stripBlanks } from "@/lib/prompt-templates";
@@ -68,23 +67,14 @@ export function clipDocText(text: string, max = MAX_DOC_CHARS): { text: string; 
   return t.length > max ? { text: t.slice(0, max), clipped: true } : { text: t, clipped: false };
 }
 
-/** Modelo pronto: análise da declaração de IR para seguro de vida (editável na tela). */
-export const IR_LIFE_INSURANCE_TEMPLATE = `Quando receber a declaração de imposto de renda (IRPF) de um cliente, analise se ele é apto a contratar um seguro de vida.
-
-Confira:
-- Renda anual: some os rendimentos tributáveis, isentos e de tributação exclusiva. Renda mínima para o seguro: R$ [PREENCHA: valor mínimo por ano].
-- Capital segurado sugerido: até [PREENCHA: quantas vezes] a renda anual.
-- Ocupação declarada (natureza da ocupação e ocupação principal). Profissões de risco (ex.: piloto, mergulhador, policial, vigilante armado, trabalho em altura) vão para análise da equipe.
-- Idade (data de nascimento): aceita de [PREENCHA: idade mínima] a [PREENCHA: idade máxima] anos.
-- Dependentes declarados (podem ser os beneficiários).
-- Bens e direitos e dívidas e ônus: patrimônio e dívidas grandes que pedem capital maior.
-- Se a declaração parece incompleta, de outro ano ou de outra pessoa, diga isso.
-
-Responda assim:
-1. Resultado: APTO, NÃO APTO ou PRECISA DE ANÁLISE DA EQUIPE.
-2. Motivos em tópicos curtos (renda anual encontrada, idade, ocupação, dependentes).
-3. Capital segurado sugerido.
-4. O que falta para concluir, se faltar alguma informação.`;
+/** Ideias curtas de uso, de vários ramos, mostradas na tela (só exemplos; nada vem preenchido). */
+export const DOC_USE_IDEAS = [
+  "Orçamento ou pedido: confira itens, quantidades e prazo e diga o que falta.",
+  "Contrato: resuma as cláusulas de prazo, valor e multa.",
+  "Exame ou laudo: liste os itens fora da referência para a equipe ver.",
+  "Boleto ou nota fiscal: diga valor, vencimento e quem emitiu.",
+  "Currículo: resuma experiência e formação para a vaga.",
+];
 
 /** Regras fixas da leitura de documento (antes dos critérios do negócio). */
 export const DOC_ANALYSIS_RULES = [
