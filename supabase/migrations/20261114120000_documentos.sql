@@ -1,6 +1,5 @@
--- Leitura de PDF pelo agente (tela Documentos): o contato manda um PDF (ex.:
--- declaração de imposto de renda) e o agente analisa com os critérios que o
--- negócio escreveu (ex.: se a pessoa é apta a um seguro de vida).
+-- Leitura de PDF pelo agente (tela Documentos): o contato manda um PDF e o
+-- agente analisa com os critérios que o próprio negócio escreveu.
 -- Pode rodar de novo com segurança.
 ALTER TABLE public.agent_settings
   ADD COLUMN IF NOT EXISTS doc_enabled boolean NOT NULL DEFAULT false;

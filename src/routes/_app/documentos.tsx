@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { IR_LIFE_INSURANCE_TEMPLATE, MAX_DOC_INSTRUCTIONS } from "@/lib/document-rules";
+import { DOC_USE_IDEAS, MAX_DOC_INSTRUCTIONS } from "@/lib/document-rules";
 import { deleteDocAnalysis, getDocuments, saveDocuments } from "@/lib/document.functions";
 import { formatWhatsApp } from "@/lib/phone";
 import { countBlanks } from "@/lib/prompt-templates";
@@ -54,12 +54,6 @@ function DocumentosPage() {
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD({ ...d, [k]: v });
   const blanks = countBlanks(d.instructions);
 
-  const useTemplate = () => {
-    if (d.instructions.trim() && !window.confirm("Trocar os critérios atuais pelo modelo?")) return;
-    set("instructions", IR_LIFE_INSURANCE_TEMPLATE);
-    toast.success("Modelo aplicado. Troque cada [PREENCHA: ...] pelos valores do seu negócio.");
-  };
-
   const save = async () => {
     setBusy(true);
     try {
@@ -95,9 +89,9 @@ function DocumentosPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Quando alguém manda um PDF no WhatsApp (por exemplo, o gerente mandando a declaração de
-            imposto de renda de um cliente), o agente lê o arquivo, analisa com os critérios abaixo
-            e responde com o resultado. O PDF não fica guardado; só a análise, aqui embaixo.
+            Quando alguém manda um PDF no WhatsApp, o agente lê o arquivo, analisa com os critérios
+            que você escrever abaixo e responde com o resultado. O PDF não fica guardado; só a
+            análise, aqui embaixo.
           </p>
           <label className="flex items-center justify-between gap-4">
             <span>
@@ -112,25 +106,27 @@ function DocumentosPage() {
           </label>
 
           <div className="space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Label htmlFor="criterios">Como analisar (critérios)</Label>
-              <Button type="button" variant="outline" size="sm" onClick={useTemplate}>
-                Usar modelo: imposto de renda e seguro de vida
-              </Button>
-            </div>
+            <Label htmlFor="criterios">Como analisar (critérios)</Label>
             <Textarea
               id="criterios"
               rows={14}
               maxLength={MAX_DOC_INSTRUCTIONS}
-              placeholder="Ex.: Ao receber a declaração de imposto de renda, diga se a pessoa é apta a um seguro de vida: renda anual mínima de R$ 60 mil, idade de 18 a 65 anos..."
+              placeholder="Escreva o que conferir e como responder para cada tipo de documento."
               value={d.instructions}
               onChange={(e) => set("instructions", e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Escreva o que conferir e como responder. Linhas que ainda têm [PREENCHA: ...] não
-              valem.
-              {blanks > 0 && ` Faltam ${blanks} trecho(s) para preencher.`}
+              Vazio, o agente só resume o documento.
+              {blanks > 0 && ` Linhas com [PREENCHA: ...] não valem (${blanks}).`}
             </p>
+            <div className="text-xs text-muted-foreground">
+              <p>Ideias de uso:</p>
+              <ul className="list-disc pl-5">
+                {DOC_USE_IDEAS.map((idea) => (
+                  <li key={idea}>{idea}</li>
+                ))}
+              </ul>
+            </div>
           </div>
 
           <div className="space-y-2">
