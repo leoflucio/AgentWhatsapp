@@ -169,6 +169,23 @@ function AgentePage() {
               </select>
             </div>
           )}
+          <div className="space-y-2">
+            <Label htmlFor="equipe">Comandos da agenda pelo WhatsApp: celulares da equipe</Label>
+            <Textarea
+              id="equipe"
+              rows={3}
+              placeholder="Um por linha, com DDD. Vazio = só a conversa com você mesmo no número conectado."
+              value={s.teamNumbers}
+              onChange={(e) => set("teamNumbers", e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Da conversa com você mesmo no WhatsApp conectado, ou desses celulares, mande texto com
+              # ou áudio: #hoje (lista para confirmar, responda os números ou "todos"), #confirmar
+              Ana, #cancelar Ana, #remarcar Ana sexta 15h, #agendar Ana amanhã 10h. O agente mostra
+              o que vai fazer e só muda a agenda depois de você responder SIM. Esses celulares nunca
+              recebem resposta da IA como cliente.
+            </p>
+          </div>
         </CardContent>
       </Card>
 

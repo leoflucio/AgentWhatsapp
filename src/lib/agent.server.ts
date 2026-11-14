@@ -33,6 +33,7 @@ import {
 } from "@/lib/agenda-time";
 import { listFreeSlots, scheduleOf } from "@/lib/agenda.server";
 import { sendText, transcribeAudio } from "@/lib/evolution.server";
+import { teamSenderOf } from "@/lib/team-commands-rules";
 import {
   DOC_RELAY_RULE,
   analysisBody,
@@ -92,6 +93,8 @@ type Ctx = {
   account: { id: string; name: string; address: string | null };
   instance: string;
   token: string | null;
+  /** Número conectado (só dígitos), para reconhecer a conversa "você". */
+  ownPhone: string | null;
 };
 
 export function fmtPhone(digits: string): string {
@@ -126,7 +129,15 @@ export async function handleAgentWebhook(instance: string, payload: any): Promis
       .eq("id", conn.account_id)
       .maybeSingle();
     if (!account) return;
-    const ctx: Ctx = { account, instance, token: conn.instance_token ?? null };
+    // A Evolution manda o próprio número da instância em `sender`.
+    const ownJid = String(payload?.sender ?? "");
+    const ownDigits = ownJid.endsWith("@lid") ? "" : ownJid.split("@")[0]!.replace(/\D/g, "");
+    const ctx: Ctx = {
+      account,
+      instance,
+      token: conn.instance_token ?? null,
+      ownPhone: ownDigits.length >= 10 ? ownDigits : null,
+    };
     for (const m of list) await handleOne(admin, ctx, m);
   } catch (e) {
     console.error("[agente] falha", e instanceof Error ? e.message : e);
@@ -307,6 +318,26 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
   // arquivo" e ele dizia ter recebido um arquivo que não existe.
   if (!m.key?.fromMe && isIgnorableIncoming(m)) return;
 
+  const { data: settings } = await admin
+    .from("agent_settings")
+    .select("*")
+    .eq("account_id", accountId)
+    .maybeSingle();
+
+  // Equipe mandando comando da agenda (conversa "você" do número conectado ou
+  // celular da lista da equipe): nunca vira conversa de cliente nem resposta da IA.
+  const teamSender = teamSenderOf({
+    fromMe: Boolean(m.key?.fromMe),
+    phone,
+    ownPhone: ctx.ownPhone,
+    teamNumbers: (settings?.team_numbers ?? []) as string[],
+  });
+  if (teamSender) {
+    const { handleTeamMessage } = await import("@/lib/team-commands.server");
+    await handleTeamMessage(admin, { ctx, settings, m, sender: teamSender, phone });
+    return;
+  }
+
   // Conversa (memória) desta pessoa.
   const { data: existing } = await admin
     .from("conversations")
@@ -346,12 +377,6 @@ async function handleOne(admin: any, ctx: Ctx, m: EvoIncoming) {
     console.error("[agente] conversa não encontrada nem criada", accountId);
     return;
   }
-
-  const { data: settings } = await admin
-    .from("agent_settings")
-    .select("*")
-    .eq("account_id", accountId)
-    .maybeSingle();
 
   // Mensagem enviada pelo celular do negócio (não pelo agente): a equipe
   // assumiu. O agente fica em silêncio nesta conversa e volta sozinho depois
