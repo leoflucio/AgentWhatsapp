@@ -6,6 +6,8 @@ import { z } from "zod";
 import {
   DEMO_DAILY_LIMIT,
   DEMO_MAX_CHARS,
+  DEMO_MAX_OUTPUT_TOKENS,
+  DEMO_MAX_REPLY_CHARS,
   allowHit,
   demoSystemPrompt,
   sanitizeDemoHistory,
@@ -45,7 +47,7 @@ export const demoChat = createServerFn({ method: "POST" })
     const history = sanitizeDemoHistory(data.messages);
     if (!history) return { ok: false, reason: "fim" };
 
-    const { todayLocalISO } = await import("@/lib/agenda-time");
+    const { todayLocalISO, localDateTimeOf } = await import("@/lib/agenda-time");
     const today = todayLocalISO();
     if (day !== today) {
       day = today;
@@ -66,13 +68,16 @@ export const demoChat = createServerFn({ method: "POST" })
       dayCount++;
       const result = await generateText({
         model,
-        system: demoSystemPrompt(today),
+        system: demoSystemPrompt(today, localDateTimeOf(new Date().toISOString()).hora),
         messages: history,
         temperature: 0.3,
-        maxOutputTokens: 400,
+        maxOutputTokens: DEMO_MAX_OUTPUT_TOKENS,
         maxRetries: 2,
       });
-      const reply = stripClosingOffer(cleanReply(result.text));
+      if (result.finishReason === "length") console.warn("[demo] resposta cortada pelo limite");
+      const reply = stripClosingOffer(cleanReply(result.text))
+        .slice(0, DEMO_MAX_REPLY_CHARS)
+        .trim();
       if (!reply) return { ok: false, reason: "indisponivel" };
       return { ok: true, reply };
     } catch (e) {
