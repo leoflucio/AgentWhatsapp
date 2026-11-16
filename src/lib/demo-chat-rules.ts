@@ -55,11 +55,16 @@ REGRAS DO SALÃO
 export const DEMO_RULES = [
   "ESTA CONVERSA É UMA DEMONSTRAÇÃO no site da Secretária Digital 24h, com um salão fictício. Atenda exatamente como atenderia um cliente do salão.",
   "Aqui não existem ferramentas, agenda real nem equipe. Quando as regras mandarem usar chamar_atendente, apenas diga que vai passar a mensagem para a equipe do salão.",
-  "Para marcar: ofereça 2 opções de horário entre 9h e 18h, de segunda a sábado, nos próximos dias do CALENDÁRIO. Quando a pessoa escolher e disser o nome, diga que o horário ficou reservado e que a equipe vai confirmar. Não peça CPF, endereço nem outros dados.",
+  "Para marcar: ofereça 2 opções de horário entre 9h e 18h, de segunda a sábado (domingo fechado), nos próximos dias do CALENDÁRIO; hoje, só horários depois de agora. Quando a pessoa escolher e disser o nome, diga que o horário ficou reservado e que a equipe vai confirmar. Não peça CPF, endereço nem outros dados.",
   "Se a pessoa perguntar sobre a própria secretária virtual (como ter uma igual, preço, se funciona no WhatsApp dela), explique em até 2 frases que esta é uma demonstração da Secretária Digital 24h, que atende no WhatsApp do negócio 24 horas por dia, e que dá para testar 7 dias grátis no botão 'Testar 7 dias grátis' desta página.",
 ];
 
-export function demoSystemPrompt(todayISO: string): string {
+/** Espaço para a resposta. O Gemini 3 gasta parte dele pensando: limite baixo cortava a resposta. */
+export const DEMO_MAX_OUTPUT_TOKENS = 4096;
+/** Resposta da demonstração cortada aqui (a IA já é instruída a ser curta). */
+export const DEMO_MAX_REPLY_CHARS = 900;
+
+export function demoSystemPrompt(todayISO: string, now?: string | null): string {
   const base = buildSystemPrompt({
     agentName: DEMO_AGENT_NAME,
     businessName: DEMO_BUSINESS_NAME,
@@ -67,6 +72,7 @@ export function demoSystemPrompt(todayISO: string): string {
     booking: false,
     instructions: DEMO_INSTRUCTIONS,
     today: todayISO.split("-").reverse().join("/"),
+    now: now ?? null,
     calendar: calendarText(todayISO, 7),
     hours: "segunda a sábado, das 9h às 18h",
     contact: "Visitante do site testando a demonstração (sem nome ainda).",

@@ -82,4 +82,11 @@ describe("demoSystemPrompt", () => {
     expect(p).toContain("DEMONSTRAÇÃO");
     expect(p).not.toContain("[PREENCHA");
   });
+
+  it("sabe a hora de agora (não oferece horário que já passou)", () => {
+    const p = demoSystemPrompt("2026-11-16", "14:09");
+    expect(p).toContain("agora são 14:09");
+    expect(p).toContain("Boa tarde");
+    expect(p).toContain("só horários depois de agora");
+  });
 });
