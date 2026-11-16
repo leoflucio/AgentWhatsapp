@@ -40,6 +40,13 @@ import {
   type TeamSender,
 } from "@/lib/team-commands-rules";
 import {
+  TEAM_DOC_OFF,
+  pdfOf,
+  teamAnalysisReply,
+  teamDocContactName,
+  teamUnreadableReply,
+} from "@/lib/document-rules";
+import {
   audioOf,
   calendarText,
   textOf,
@@ -110,6 +117,15 @@ export async function handleTeamMessage(
       (e: unknown) => console.error("[equipe] envio falhou", e instanceof Error ? e.message : e),
     );
   };
+
+  // PDF do gerente: mesma leitura (e mesmos critérios) da tela Documentos; a
+  // análise volta só para quem mandou.
+  const pdf = pdfOf(m);
+  if (pdf) {
+    const body = await analyzeTeamPdf(admin, { ctx, settings, m, sender, phone, pdf });
+    if (body) await reply(body);
+    return;
+  }
 
   // 1. Resposta a um plano esperando o "sim".
   if (pending && isYes(text)) {
@@ -220,6 +236,81 @@ export async function handleTeamMessage(
   await reply(
     problems.length ? `Não consegui: ${problems.join("; ")}.\n\n${TEAM_HELP}` : TEAM_HELP,
   );
+}
+
+/**
+ * Lê o PDF que a equipe mandou com os critérios da tela Documentos e grava a
+ * análise lá (sem conversa). Devolve a resposta para quem mandou, ou null
+ * quando não deve responder (reenvio do mesmo arquivo, conta sem acesso).
+ */
+async function analyzeTeamPdf(
+  admin: any,
+  args: {
+    ctx: Ctx;
+    settings: any;
+    m: EvoIncoming;
+    sender: TeamSender;
+    phone: string;
+    pdf: { fileName: string; caption: string };
+  },
+): Promise<string | null> {
+  const { ctx, settings, m, sender, phone, pdf } = args;
+  const accountId = ctx.account.id;
+  if (settings?.doc_enabled !== true) return TEAM_DOC_OFF;
+
+  const { resolveAccess } = await import("@/lib/billing.server");
+  const { access } = await resolveAccess(admin, accountId);
+  if (access.kind === "bloqueado" || access.kind === "vencido") {
+    console.log("[equipe] conta sem acesso (PDF)", accountId);
+    return null;
+  }
+
+  // Reserva ANTES da análise: o reenvio do mesmo evento não gasta outra
+  // chamada de IA. Sem a migration nova (coluna wa_message_id), segue sem reserva.
+  const waId = m.key?.id ?? null;
+  const row = {
+    account_id: accountId,
+    conversation_id: null,
+    phone,
+    contact_name: teamDocContactName(sender, m.pushName),
+    file_name: pdf.fileName,
+  };
+  let claimed = false;
+  if (waId) {
+    const { error } = await admin
+      .from("document_analyses")
+      .insert({ ...row, wa_message_id: waId, result: "(analisando…)" });
+    if (error?.code === "23505") return null; // já analisado (ou analisando)
+    if (error) console.warn("[equipe] reserva da análise", error.message);
+    claimed = !error;
+  }
+
+  const { analyzePdf } = await import("@/lib/document.server");
+  const r = await analyzePdf({
+    instance: ctx.instance,
+    messageId: m.key?.id,
+    fileName: pdf.fileName,
+    caption: pdf.caption,
+    instructions: String(settings?.doc_instructions ?? ""),
+  });
+  const result = r.ok
+    ? r.result
+    : r.reason === "grande"
+      ? "(PDF grande demais para ler)"
+      : "(não foi possível ler o PDF)";
+  const pages = r.ok ? r.pages : null;
+  const { error: saveErr } = claimed
+    ? await admin
+        .from("document_analyses")
+        .update({ result, pages })
+        .eq("account_id", accountId)
+        .eq("wa_message_id", waId)
+    : await admin.from("document_analyses").insert({ ...row, result, pages });
+  if (saveErr) console.error("[equipe] análise do documento não gravada", saveErr.message);
+
+  return r.ok
+    ? teamAnalysisReply(pdf.fileName, r.result)
+    : teamUnreadableReply(pdf.fileName, r.reason === "grande");
 }
 
 /** Contatos da lista (tela Contatos) que o comando parece citar: "nome | celular". */

@@ -7,6 +7,9 @@ import {
   docAnalysisPrompt,
   docAnalysisSystem,
   parseDocNumbers,
+  teamAnalysisReply,
+  teamDocContactName,
+  teamUnreadableReply,
   pdfOf,
   unreadableBody,
 } from "./document-rules";
@@ -93,5 +96,18 @@ describe("corpo gravado na conversa", () => {
   it("PDF grande ou ilegível vira aviso", () => {
     expect(unreadableBody("a.pdf", "", true)).toContain("grande demais");
     expect(unreadableBody("a.pdf", "", false)).toContain("não foi possível ler");
+  });
+});
+
+describe("PDF da equipe", () => {
+  it("resposta ao gerente traz o arquivo e o resultado", () => {
+    expect(teamAnalysisReply("ir.pdf", " Apto. \n")).toBe('📄 Análise de "ir.pdf":\n\nApto.');
+    expect(teamUnreadableReply("ir.pdf", true)).toContain("grande demais");
+    expect(teamUnreadableReply("ir.pdf", false)).toContain("Não consegui ler");
+  });
+  it("nome na tela Documentos", () => {
+    expect(teamDocContactName("self", "Leo")).toBe("Equipe (você)");
+    expect(teamDocContactName("phone", "Carlos")).toBe("Equipe (Carlos)");
+    expect(teamDocContactName("phone", undefined)).toBe("Equipe");
   });
 });

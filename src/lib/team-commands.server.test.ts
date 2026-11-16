@@ -9,6 +9,9 @@ vi.mock("@/lib/evolution.server", () => ({
   }),
   transcribeAudio: vi.fn(async () => "confirma a Ana"),
 }));
+let pdfResult: any = { ok: true, result: "Renda anual R$ 80 mil: apto.", pages: 2 };
+const analyzePdf = vi.fn(async (_args: any) => pdfResult);
+vi.mock("@/lib/document.server", () => ({ analyzePdf: (a: any) => analyzePdf(a) }));
 vi.mock("@/lib/billing.server", () => ({
   resolveAccess: vi.fn(async () => ({ access: { kind: "plano", limit: null }, used: 0 })),
 }));
@@ -48,6 +51,15 @@ function fakeDb(tables: Record<string, any[]>) {
     const run = async () => {
       const hit = rows.filter((r) => filters.every((f) => f(r)));
       if (op === "update") hit.forEach((r) => Object.assign(r, payload));
+      if (
+        op === "insert" &&
+        payload.wa_message_id &&
+        rows.some(
+          (r) => r.account_id === payload.account_id && r.wa_message_id === payload.wa_message_id,
+        )
+      ) {
+        return { data: null, error: { code: "23505", message: "duplicate" } };
+      }
       if (op === "insert") rows.push({ id: `n${rows.length + 1}`, ...payload });
       return { data: op === "select" ? hit : null, error: null };
     };
@@ -223,5 +235,82 @@ describe("comandos da equipe (fluxo)", () => {
     await run("lembrar de comprar café");
     expect(sent).toHaveLength(0);
     expect(f).not.toHaveBeenCalled();
+  });
+
+  describe("PDF mandado pelo gerente", () => {
+    const pdfMsg = (id: string) => ({
+      key: { fromMe: false, id },
+      pushName: "Carlos",
+      message: {
+        documentWithCaptionMessage: {
+          message: {
+            documentMessage: {
+              fileName: "ir-cliente.pdf",
+              mimetype: "application/pdf",
+              caption: "É apto?",
+            },
+          },
+        },
+      },
+    });
+    const send = (id: string, extra: any = {}) =>
+      handleTeamMessage(fakeDb(db) as any, {
+        ctx,
+        settings: {
+          ...settings,
+          doc_enabled: true,
+          doc_instructions: "Renda mínima 50 mil.",
+          ...extra,
+        },
+        m: pdfMsg(id) as any,
+        sender: "phone",
+        phone: "5511988887777",
+      });
+    beforeEach(() => {
+      analyzePdf.mockClear();
+      pdfResult = { ok: true, result: "Renda anual R$ 80 mil: apto.", pages: 2 };
+    });
+
+    it("lê com os critérios da tela Documentos e responde só ao gerente", async () => {
+      await send("P1");
+      expect(analyzePdf).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messageId: "P1",
+          fileName: "ir-cliente.pdf",
+          caption: "É apto?",
+          instructions: "Renda mínima 50 mil.",
+        }),
+      );
+      expect(sent).toEqual(['📄 Análise de "ir-cliente.pdf":\n\nRenda anual R$ 80 mil: apto.']);
+      expect(db.document_analyses).toHaveLength(1);
+      expect(db.document_analyses![0]).toMatchObject({
+        wa_message_id: "P1",
+        result: "Renda anual R$ 80 mil: apto.",
+        pages: 2,
+        contact_name: "Equipe (Carlos)",
+        conversation_id: null,
+      });
+      expect(db.conversations ?? []).toHaveLength(0);
+    });
+
+    it("reenvio do mesmo arquivo não analisa de novo", async () => {
+      await send("P2");
+      await send("P2");
+      expect(analyzePdf).toHaveBeenCalledTimes(1);
+      expect(sent).toHaveLength(1);
+    });
+
+    it("PDF ilegível: avisa o gerente e registra", async () => {
+      pdfResult = { ok: false, reason: "ilegivel" };
+      await send("P3");
+      expect(sent.at(-1)).toContain("Não consegui ler");
+      expect(db.document_analyses![0].result).toBe("(não foi possível ler o PDF)");
+    });
+
+    it("leitura desligada: avisa sem chamar a IA", async () => {
+      await send("P4", { doc_enabled: false });
+      expect(analyzePdf).not.toHaveBeenCalled();
+      expect(sent.at(-1)).toContain("desligada");
+    });
   });
 });

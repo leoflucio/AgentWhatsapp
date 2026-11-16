@@ -127,3 +127,28 @@ export function unreadableBody(fileName: string, caption: string, tooBig: boolea
 
 /** Regra extra do prompt do agente quando a leitura de documentos está ligada. */
 export const DOC_RELAY_RULE = `PDFs: exceção à regra de arquivos. Quando a mensagem da pessoa trouxer ${DOC_ANALYSIS_TAG}, o documento já foi analisado com os critérios do negócio: passe o resultado para ela com clareza (pode resumir a forma, nunca mude a conclusão nem invente dado que não está na análise). Se o aviso disser que não foi possível ler o PDF, siga o que ele pede.`;
+
+/**
+ * PDF mandado pela equipe (gerente com o celular na lista da equipe da tela
+ * Agente, ou a conversa "você" do número conectado). Mesmos critérios da tela
+ * Documentos; a análise volta só para quem mandou e nunca vira conversa de
+ * cliente.
+ */
+export const TEAM_DOC_OFF =
+  "Recebi o PDF, mas a leitura de documentos está desligada. Ligue em Documentos, no app, para eu analisar.";
+
+export function teamAnalysisReply(fileName: string, result: string): string {
+  return `📄 Análise de "${fileName}":\n\n${result.trim()}`;
+}
+
+export function teamUnreadableReply(fileName: string, tooBig: boolean): string {
+  return tooBig
+    ? `O PDF "${fileName}" é grande demais para eu ler. Mande um arquivo menor ou só as páginas necessárias.`
+    : `Não consegui ler o PDF "${fileName}". Mande de novo, por favor.`;
+}
+
+/** Nome gravado na tela Documentos para análise pedida pela equipe. */
+export function teamDocContactName(sender: "self" | "phone", pushName?: string | null): string {
+  const who = sender === "self" ? "você" : String(pushName ?? "").trim();
+  return who ? `Equipe (${who})` : "Equipe";
+}
