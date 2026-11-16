@@ -141,7 +141,9 @@ function DocumentosPage() {
               onChange={(e) => set("numbers", e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              No modo teste, só os números de teste da tela Agente.
+              No modo teste, só os números de teste da tela Agente. Os celulares da equipe (tela
+              Agente) e a conversa &quot;você&quot; do número conectado sempre podem mandar: a
+              análise volta só para quem mandou.
             </p>
           </div>
 
